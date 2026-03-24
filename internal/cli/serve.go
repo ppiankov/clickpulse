@@ -12,6 +12,8 @@ import (
 	_ "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/ppiankov/clickpulse/internal/alerter"
+	"github.com/ppiankov/clickpulse/internal/annotator"
 	"github.com/ppiankov/clickpulse/internal/collector"
 	"github.com/ppiankov/clickpulse/internal/config"
 	"github.com/ppiankov/clickpulse/internal/engine"
@@ -51,7 +53,10 @@ var serveCmd = &cobra.Command{
 			collector.NewDictionaries(),
 		}
 
-		eng := engine.New(db, cfg.PollInterval, collectors)
+		a := alerter.New(cfg.TelegramBotToken, cfg.TelegramChatID, cfg.AlertWebhookURL, cfg.AlertCooldown)
+		ann := annotator.New(cfg.GrafanaURL, cfg.GrafanaToken, cfg.GrafanaDashboardUID, cfg.AlertCooldown)
+
+		eng := engine.New(db, cfg.PollInterval, collectors, a, ann)
 		go eng.Run(ctx)
 
 		srv := server.New(cfg.MetricsPort)

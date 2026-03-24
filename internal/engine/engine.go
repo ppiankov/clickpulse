@@ -6,6 +6,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/ppiankov/clickpulse/internal/alerter"
+	"github.com/ppiankov/clickpulse/internal/annotator"
 	"github.com/ppiankov/clickpulse/internal/collector"
 	"github.com/ppiankov/clickpulse/internal/metrics"
 	"github.com/ppiankov/clickpulse/internal/retry"
@@ -16,14 +18,18 @@ type Engine struct {
 	db         *sql.DB
 	interval   time.Duration
 	collectors []collector.Collector
+	alerter    *alerter.Alerter
+	annotator  *annotator.Annotator
 }
 
 // New creates an engine with the given database, poll interval, and collectors.
-func New(db *sql.DB, interval time.Duration, collectors []collector.Collector) *Engine {
+func New(db *sql.DB, interval time.Duration, collectors []collector.Collector, a *alerter.Alerter, ann *annotator.Annotator) *Engine {
 	return &Engine{
 		db:         db,
 		interval:   interval,
 		collectors: collectors,
+		alerter:    a,
+		annotator:  ann,
 	}
 }
 
@@ -71,4 +77,12 @@ func (e *Engine) poll(ctx context.Context) {
 	}
 
 	metrics.ScrapeDuration.Set(time.Since(start).Seconds())
+
+	// Run alerting and annotation checks after collectors.
+	if e.alerter != nil {
+		alerter.CheckAndFire(ctx, e.db, e.alerter)
+	}
+	if e.annotator != nil {
+		e.annotator.CheckAndAnnotate(ctx, e.db)
+	}
 }
