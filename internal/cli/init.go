@@ -35,6 +35,10 @@ STMT_LIMIT=50
 # Webhook alerts (optional)
 # ALERT_WEBHOOK_URL=
 
+# Standalone Keeper endpoints for direct mntr monitoring (comma-separated)
+# Required when Keeper runs on separate servers from ClickHouse
+# KEEPER_ENDPOINTS=keeper1:9181,keeper2:9181,keeper3:9181
+
 # Alert cooldown
 ALERT_COOLDOWN=5m
 

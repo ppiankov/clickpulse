@@ -30,6 +30,9 @@ type Config struct {
 	AlertWebhookURL  string
 	AlertCooldown    time.Duration
 
+	// Keeper direct endpoints (standalone Keeper nodes)
+	KeeperEndpoints []string
+
 	// Grafana annotations
 	GrafanaURL          string
 	GrafanaToken        string
@@ -51,8 +54,19 @@ func Load() (*Config, error) {
 		dsns[i] = strings.TrimSpace(dsns[i])
 	}
 
+	var keeperEndpoints []string
+	if ke := os.Getenv("KEEPER_ENDPOINTS"); ke != "" {
+		for _, ep := range strings.Split(ke, ",") {
+			ep = strings.TrimSpace(ep)
+			if ep != "" {
+				keeperEndpoints = append(keeperEndpoints, ep)
+			}
+		}
+	}
+
 	return &Config{
 		DSNs:                dsns,
+		KeeperEndpoints:     keeperEndpoints,
 		MetricsPort:         envInt("METRICS_PORT", 9188),
 		PollInterval:        envDuration("POLL_INTERVAL", 5*time.Second),
 		SlowQueryThreshold:  envDuration("SLOW_QUERY_THRESHOLD", 5*time.Second),

@@ -55,7 +55,7 @@ var serveCmd = &cobra.Command{
 			collector.NewServer(),
 			collector.NewQueryLog(cfg.RegressionThreshold, cfg.StmtLimit),
 			collector.NewDiscrepancy(),
-			collector.NewKeeper(),
+			collector.NewKeeper(cfg.KeeperEndpoints),
 			collector.NewDDL(),
 			collector.NewDictionaries(),
 		}
