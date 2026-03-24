@@ -52,7 +52,7 @@ func (m *Mutations) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var active, stuck int
 	mutationPartsRemaining.Reset()

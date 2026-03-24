@@ -57,7 +57,7 @@ func (m *Merges) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var count int
 	var totalParts int64

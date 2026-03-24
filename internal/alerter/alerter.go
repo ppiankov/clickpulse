@@ -89,7 +89,7 @@ func (a *Alerter) sendTelegram(ctx context.Context, text string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("telegram returned %d", resp.StatusCode)
@@ -114,7 +114,7 @@ func (a *Alerter) sendWebhook(ctx context.Context, alert Alert) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("webhook returned %d", resp.StatusCode)

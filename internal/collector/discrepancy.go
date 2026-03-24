@@ -86,7 +86,7 @@ func (d *Discrepancy) collectLeaderless(ctx context.Context, q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	replicationLeaderlessTables.Reset()
 	for rows.Next() {
@@ -111,7 +111,7 @@ func (d *Discrepancy) collectUnreplicated(ctx context.Context, q Querier) error 
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	replicationUnreplicatedTables.Reset()
 	for rows.Next() {
@@ -146,7 +146,7 @@ func (d *Discrepancy) collectPartCountDiff(ctx context.Context, q Querier) error
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	replicationPartCountDiff.Reset()
 	for rows.Next() {

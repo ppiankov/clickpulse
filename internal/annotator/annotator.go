@@ -119,7 +119,7 @@ func (a *Annotator) annotate(ctx context.Context, name, text string, tags []stri
 		log.Printf("annotator: %s failed: %v", name, err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		log.Printf("annotator: %s returned %d", name, resp.StatusCode)

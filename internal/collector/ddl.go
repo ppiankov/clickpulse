@@ -63,7 +63,7 @@ func (d *DDL) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var total, stuck int
 	var oldestAge float64

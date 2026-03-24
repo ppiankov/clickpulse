@@ -53,7 +53,7 @@ func (d *Dictionaries) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	dictionaryStatus.Reset()
 	dictionaryBytes.Reset()

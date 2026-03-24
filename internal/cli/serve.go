@@ -33,7 +33,7 @@ var serveCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("clickhouse open: %w", err)
 		}
-		defer db.Close()
+		defer func() { _ = db.Close() }()
 
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()

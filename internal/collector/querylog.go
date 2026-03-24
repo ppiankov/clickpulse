@@ -73,7 +73,7 @@ func (q *QueryLog) Collect(querier Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	current := make(map[string]queryStats)
 	for rows.Next() {

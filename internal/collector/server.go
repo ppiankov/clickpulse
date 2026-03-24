@@ -60,7 +60,7 @@ func (s *Server) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var metric string
@@ -90,7 +90,7 @@ func (s *Server) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows2.Close()
+	defer func() { _ = rows2.Close() }()
 
 	for rows2.Next() {
 		var event string

@@ -58,7 +58,7 @@ func (r *Replication) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var total int
 	var totalInserts int64

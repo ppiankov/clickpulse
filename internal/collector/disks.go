@@ -47,7 +47,7 @@ func (d *Disks) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	diskBytesTotal.Reset()
 	diskBytesFree.Reset()

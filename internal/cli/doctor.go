@@ -24,7 +24,7 @@ var doctorCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("clickhouse open: %w", err)
 		}
-		defer db.Close()
+		defer func() { _ = db.Close() }()
 
 		results := doctor.Run(cmd.Context(), db)
 
@@ -35,13 +35,13 @@ var doctorCmd = &cobra.Command{
 				status = "FAIL"
 				failed++
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "  [%s] %-30s %s\n", status, r.Name, r.Detail)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  [%s] %-30s %s\n", status, r.Name, r.Detail)
 		}
 
 		if failed > 0 {
 			return fmt.Errorf("%d check(s) failed", failed)
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), "\nall checks passed")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nall checks passed")
 		return nil
 	},
 }

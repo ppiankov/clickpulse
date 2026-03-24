@@ -57,7 +57,7 @@ func (p *Parts) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	partsPerPartition.Reset()
 	partsTotal.Reset()

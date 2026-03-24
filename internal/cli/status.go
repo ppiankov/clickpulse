@@ -24,7 +24,7 @@ var statusCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("clickhouse open: %w", err)
 		}
-		defer db.Close()
+		defer func() { _ = db.Close() }()
 
 		s, err := snapshot.Take(cmd.Context(), db)
 		if err != nil {
@@ -32,17 +32,17 @@ var statusCmd = &cobra.Command{
 		}
 
 		w := cmd.OutOrStdout()
-		fmt.Fprintf(w, "ClickHouse %s (up %s)\n\n", s.Version, s.Uptime)
-		fmt.Fprintf(w, "  Queries:    %d active, %d slow\n", s.ActiveQueries, s.SlowQueries)
-		fmt.Fprintf(w, "  Merges:     %d active (%.1f MB/s)\n", s.ActiveMerges, s.MergeBytesPS/1024/1024)
-		fmt.Fprintf(w, "  Replication: %.0fs lag, %d readonly\n", s.ReplicaLag, s.ReadonlyTables)
-		fmt.Fprintf(w, "  Parts:      %d active\n", s.TotalParts)
+		_, _ = fmt.Fprintf(w, "ClickHouse %s (up %s)\n\n", s.Version, s.Uptime)
+		_, _ = fmt.Fprintf(w, "  Queries:    %d active, %d slow\n", s.ActiveQueries, s.SlowQueries)
+		_, _ = fmt.Fprintf(w, "  Merges:     %d active (%.1f MB/s)\n", s.ActiveMerges, s.MergeBytesPS/1024/1024)
+		_, _ = fmt.Fprintf(w, "  Replication: %.0fs lag, %d readonly\n", s.ReplicaLag, s.ReadonlyTables)
+		_, _ = fmt.Fprintf(w, "  Parts:      %d active\n", s.TotalParts)
 
 		keeper := "ok"
 		if !s.KeeperOK {
 			keeper = "unreachable"
 		}
-		fmt.Fprintf(w, "  Keeper:     %s\n", keeper)
+		_, _ = fmt.Fprintf(w, "  Keeper:     %s\n", keeper)
 
 		return nil
 	},

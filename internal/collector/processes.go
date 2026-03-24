@@ -65,7 +65,7 @@ func (p *Processes) Collect(q Querier) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var total, slow, waiting int
 	var maxElapsed float64
