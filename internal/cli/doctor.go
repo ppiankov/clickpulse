@@ -2,6 +2,7 @@ package cli
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	_ "github.com/ClickHouse/clickhouse-go/v2"
@@ -28,6 +29,11 @@ var doctorCmd = &cobra.Command{
 
 		results := doctor.Run(cmd.Context(), db)
 
+		format, _ := cmd.Flags().GetString("format")
+		if format == "json" {
+			return doctorJSON(cmd, results)
+		}
+
 		failed := 0
 		for _, r := range results {
 			status := "PASS"
@@ -44,4 +50,36 @@ var doctorCmd = &cobra.Command{
 		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "\nall checks passed")
 		return nil
 	},
+}
+
+func init() {
+	doctorCmd.Flags().String("format", "text", "Output format: text or json")
+}
+
+func doctorJSON(cmd *cobra.Command, results []doctor.Result) error {
+	type check struct {
+		Name    string `json:"name"`
+		Status  string `json:"status"`
+		Message string `json:"message"`
+	}
+
+	overall := "healthy"
+	checks := make([]check, 0, len(results))
+	for _, r := range results {
+		s := "pass"
+		if !r.Passed {
+			s = "fail"
+			overall = "degraded"
+		}
+		checks = append(checks, check{Name: r.Name, Status: s, Message: r.Detail})
+	}
+
+	out := map[string]any{
+		"status": overall,
+		"checks": checks,
+	}
+
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
 }

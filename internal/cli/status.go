@@ -2,6 +2,7 @@ package cli
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	_ "github.com/ClickHouse/clickhouse-go/v2"
@@ -31,6 +32,25 @@ var statusCmd = &cobra.Command{
 			return fmt.Errorf("snapshot: %w", err)
 		}
 
+		format, _ := cmd.Flags().GetString("format")
+		if format == "json" {
+			out := map[string]any{
+				"version":         s.Version,
+				"uptime_seconds":  s.Uptime.Seconds(),
+				"active_queries":  s.ActiveQueries,
+				"slow_queries":    s.SlowQueries,
+				"active_merges":   s.ActiveMerges,
+				"merge_bytes_ps":  s.MergeBytesPS,
+				"replica_lag":     s.ReplicaLag,
+				"readonly_tables": s.ReadonlyTables,
+				"total_parts":     s.TotalParts,
+				"keeper_ok":       s.KeeperOK,
+			}
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			enc.SetIndent("", "  ")
+			return enc.Encode(out)
+		}
+
 		w := cmd.OutOrStdout()
 		_, _ = fmt.Fprintf(w, "ClickHouse %s (up %s)\n\n", s.Version, s.Uptime)
 		_, _ = fmt.Fprintf(w, "  Queries:    %d active, %d slow\n", s.ActiveQueries, s.SlowQueries)
@@ -46,4 +66,8 @@ var statusCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+func init() {
+	statusCmd.Flags().String("format", "text", "Output format: text or json")
 }
