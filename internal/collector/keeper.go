@@ -12,6 +12,10 @@ import (
 )
 
 var (
+	keeperUp = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "clickhouse_keeper_up",
+		Help: "1 if the Keeper node is reachable, 0 otherwise",
+	}, []string{"keeper"})
 	keeperIsLeader = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_keeper_is_leader",
 		Help: "1 if this Keeper node is the leader",
@@ -35,7 +39,7 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(keeperIsLeader, keeperLatency, keeperOutstandingRequests, keeperZnodeCount, keeperEphemeralsCount)
+	prometheus.MustRegister(keeperUp, keeperIsLeader, keeperLatency, keeperOutstandingRequests, keeperZnodeCount, keeperEphemeralsCount)
 }
 
 // Keeper collects Keeper health metrics.
@@ -69,10 +73,11 @@ func (k *Keeper) collectDirect() error {
 		stats, err := keeper.FetchMntr(ctx, ep)
 		if err != nil {
 			log.Printf("keeper mntr %s failed: %v", ep, err)
-			keeperIsLeader.WithLabelValues(ep).Set(0)
+			keeperUp.WithLabelValues(ep).Set(0)
 			continue
 		}
 
+		keeperUp.WithLabelValues(ep).Set(1)
 		leader := 0.0
 		if stats.IsLeader {
 			leader = 1.0

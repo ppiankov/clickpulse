@@ -61,4 +61,32 @@ spec:
             severity: critical
           annotations:
             summary: "ClickHouse has read-only replicas"
+        - alert: ClickHouseKeeperDown
+          expr: clickhouse_keeper_up == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Keeper node {{ "{{ $labels.keeper }}" }} is unreachable"
+        - alert: ClickHouseKeeperNoLeader
+          expr: sum(clickhouse_keeper_is_leader) == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No Keeper leader elected across the cluster"
+        - alert: ClickHouseKeeperHighLatency
+          expr: clickhouse_keeper_latency_seconds > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Keeper {{ "{{ $labels.keeper }}" }} latency > 500ms"
+        - alert: ClickHouseKeeperOutstandingRequests
+          expr: clickhouse_keeper_outstanding_requests > 100
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Keeper {{ "{{ $labels.keeper }}" }} has > 100 outstanding requests"
 {{- end }}
