@@ -1,12 +1,6 @@
----
-name: clickpulse
-description: A heartbeat monitor for ClickHouse — polls system tables, exposes Prometheus metrics, fires alerts
-user-invocable: false
-metadata:
-  version: 0.1.0
-  language: go
-  license: MIT
----
+# clickpulse
+
+A heartbeat monitor for ClickHouse — polls system tables, exposes Prometheus metrics, fires alerts.
 
 ## Install
 
@@ -22,22 +16,28 @@ go install github.com/ppiankov/clickpulse/cmd/clickpulse@latest
 
 ## Commands
 
-### `clickpulse serve`
+### clickpulse serve
 
 Start the metrics exporter. Connects to ClickHouse, runs 12 collectors on a poll loop, exposes `/metrics` and `/healthz`.
 
 **Environment variables:** `CLICKHOUSE_DSN` (required), `METRICS_PORT` (default 9188), `POLL_INTERVAL` (default 5s), `SLOW_QUERY_THRESHOLD` (default 5s), `REGRESSION_THRESHOLD` (default 2.0), `STMT_LIMIT` (default 50), `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ALERT_WEBHOOK_URL`, `ALERT_COOLDOWN`, `GRAFANA_URL`, `GRAFANA_TOKEN`, `GRAFANA_DASHBOARD_UID`.
 
-**Exit codes:** `0` success, `1` fatal error (bad config, connection refused).
+**Exit codes:**
+- 0: clean shutdown
+- 1: startup error (bad config, connection refused)
 
-### `clickpulse status [--format json]`
+### clickpulse status
 
-One-shot cluster health summary: version, uptime, active queries, merge pressure, replica lag, part count, Keeper status.
+One-shot cluster health summary.
+
+```bash
+clickpulse status --format json
+```
 
 **Flags:**
 - `--format json` — structured JSON output
 
-**JSON output schema:**
+**JSON output:**
 
 ```json
 {
@@ -54,16 +54,22 @@ One-shot cluster health summary: version, uptime, active queries, merge pressure
 }
 ```
 
-**Exit codes:** `0` success, `1` error (connection refused, query failed).
+**Exit codes:**
+- 0: success
+- 1: error (connection refused, query failed)
 
-### `clickpulse doctor [--format json]`
+### clickpulse doctor
 
-Diagnose ClickHouse connectivity and permissions. Checks: connectivity, version, access to 9 system tables, Keeper availability.
+Diagnose ClickHouse connectivity and permissions.
+
+```bash
+clickpulse doctor --format json
+```
 
 **Flags:**
 - `--format json` — structured JSON output per ANCC doctor convention
 
-**JSON output schema:**
+**JSON output:**
 
 ```json
 {
@@ -79,19 +85,27 @@ Diagnose ClickHouse connectivity and permissions. Checks: connectivity, version,
 
 `status` is `healthy` when all checks pass, `degraded` when any check fails.
 
-**Exit codes:** `0` all checks pass, `1` one or more checks failed.
+**Exit codes:**
+- 0: all checks pass
+- 1: one or more checks failed
 
-### `clickpulse init`
+### clickpulse init
 
 Print a default `.env` configuration with all supported environment variables and sensible defaults.
 
-**Exit codes:** `0` success.
+```bash
+clickpulse init > .env
+```
 
-### `clickpulse version`
+**Exit codes:**
+- 0: success
+
+### clickpulse version
 
 Print the version string.
 
-**Exit codes:** `0` success.
+**Exit codes:**
+- 0: success
 
 ## What this does NOT do
 
