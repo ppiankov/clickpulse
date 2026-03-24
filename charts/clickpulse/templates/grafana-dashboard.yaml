@@ -1,0 +1,12 @@
+{{- if .Values.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "clickpulse.fullname" . }}-dashboard
+  labels:
+    {{- include "clickpulse.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  clickpulse.json: |-
+    {{- .Files.Get "dashboards/clickpulse.json" | nindent 4 }}
+{{- end }}

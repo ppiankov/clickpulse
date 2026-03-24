@@ -1,0 +1,64 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "clickpulse.fullname" . }}
+  labels:
+    {{- include "clickpulse.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: clickpulse.rules
+      rules:
+        - alert: ClickHouseDown
+          expr: clickhouse_up == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ClickHouse is unreachable"
+        - alert: ClickHouseReplicaLag
+          expr: clickhouse_replica_lag_seconds > 30
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ClickHouse replica lag > 30s"
+        - alert: ClickHouseMergeBacklog
+          expr: clickhouse_merges_active > 50
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ClickHouse merge backlog high"
+        - alert: ClickHouseStuckMutations
+          expr: clickhouse_mutations_stuck > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ClickHouse has stuck mutations"
+        - alert: ClickHousePartExplosion
+          expr: max(clickhouse_parts_per_partition) > 300
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ClickHouse partition has > 300 parts"
+        - alert: ClickHouseDiskFull
+          expr: clickhouse_disk_used_ratio > 0.95
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ClickHouse disk > 95% full"
+        - alert: ClickHouseReplicaReadonly
+          expr: sum(clickhouse_replica_readonly) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ClickHouse has read-only replicas"
+{{- end }}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: clickpulse
+description: A heartbeat monitor for ClickHouse — Prometheus metrics exporter
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

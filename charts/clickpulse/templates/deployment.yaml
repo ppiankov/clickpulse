@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "clickpulse.fullname" . }}
+  labels:
+    {{- include "clickpulse.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "clickpulse.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "clickpulse.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: clickpulse
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve"]
+          env:
+            - name: CLICKHOUSE_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "clickpulse.fullname" . }}
+                  key: dsn
+            - name: METRICS_PORT
+              value: {{ .Values.metricsPort | quote }}
+            - name: POLL_INTERVAL
+              value: {{ .Values.pollInterval | quote }}
+            - name: SLOW_QUERY_THRESHOLD
+              value: {{ .Values.slowQueryThreshold | quote }}
+            - name: REGRESSION_THRESHOLD
+              value: {{ .Values.regressionThreshold | quote }}
+            - name: STMT_LIMIT
+              value: {{ .Values.stmtLimit | quote }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metricsPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

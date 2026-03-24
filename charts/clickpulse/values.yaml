@@ -1,0 +1,38 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/ppiankov/clickpulse
+  tag: ""
+  pullPolicy: IfNotPresent
+
+clickhouse:
+  dsn: ""
+
+metricsPort: 9188
+pollInterval: "5s"
+slowQueryThreshold: "5s"
+regressionThreshold: "2.0"
+stmtLimit: "50"
+
+serviceMonitor:
+  enabled: false
+  interval: "30s"
+  labels: {}
+
+prometheusRule:
+  enabled: false
+  labels: {}
+
+grafanaDashboard:
+  enabled: false
+
+resources:
+  limits:
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
