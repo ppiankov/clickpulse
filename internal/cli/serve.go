@@ -36,8 +36,13 @@ var serveCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		// No collectors yet — they will be added in phase 2.
-		var collectors []collector.Collector
+		collectors := []collector.Collector{
+			collector.NewProcesses(cfg.SlowQueryThreshold),
+			collector.NewMerges(),
+			collector.NewMutations(),
+			collector.NewReplication(),
+			collector.NewParts(),
+		}
 
 		eng := engine.New(db, cfg.PollInterval, collectors)
 		go eng.Run(ctx)
