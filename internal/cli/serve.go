@@ -42,6 +42,10 @@ var serveCmd = &cobra.Command{
 			collector.NewMutations(),
 			collector.NewReplication(),
 			collector.NewParts(),
+			collector.NewDisks(),
+			collector.NewServer(),
+			collector.NewQueryLog(cfg.RegressionThreshold, cfg.StmtLimit),
+			collector.NewDiscrepancy(),
 		}
 
 		eng := engine.New(db, cfg.PollInterval, collectors)
