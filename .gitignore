@@ -1,0 +1,11 @@
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+.env
+*.env
+!deploy/*.env.example
+vendor/

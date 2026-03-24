@@ -1,0 +1,17 @@
+[Unit]
+Description=clickpulse ClickHouse metrics exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=clickpulse
+Group=clickpulse
+EnvironmentFile=/etc/clickpulse/clickpulse.env
+ExecStart=/usr/local/bin/clickpulse serve
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
