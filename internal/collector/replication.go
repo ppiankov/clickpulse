@@ -11,23 +11,23 @@ var (
 	replicaQueueSize = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_replica_queue_size",
 		Help: "Replication queue size per table",
-	}, []string{"database", "table"})
-	replicaInsertsInQueue = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node", "database", "table"})
+	replicaInsertsInQueue = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_replica_inserts_in_queue",
 		Help: "Total insert operations waiting in replication queues",
-	})
-	replicaLag = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	replicaLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_replica_lag_seconds",
 		Help: "Maximum absolute delay across all replicated tables",
-	})
+	}, []string{"node"})
 	replicaReadonly = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_replica_readonly",
 		Help: "1 if the replica is in read-only mode",
-	}, []string{"database", "table"})
-	replicasTotal = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node", "database", "table"})
+	replicasTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_replicas_total",
 		Help: "Total number of replicated tables",
-	})
+	}, []string{"node"})
 )
 
 func init() {
@@ -41,7 +41,7 @@ func NewReplication() *Replication { return &Replication{} }
 
 func (r *Replication) Name() string { return "replication" }
 
-func (r *Replication) Collect(q Querier) error {
+func (r *Replication) Collect(q Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -64,9 +64,6 @@ func (r *Replication) Collect(q Querier) error {
 	var totalInserts int64
 	var maxLag float64
 
-	replicaQueueSize.Reset()
-	replicaReadonly.Reset()
-
 	for rows.Next() {
 		var database, table string
 		var queueSize, insertsInQueue int64
@@ -84,13 +81,13 @@ func (r *Replication) Collect(q Querier) error {
 			maxLag = lag
 		}
 
-		replicaQueueSize.WithLabelValues(database, table).Set(float64(queueSize))
-		replicaReadonly.WithLabelValues(database, table).Set(float64(isReadonly))
+		replicaQueueSize.WithLabelValues(node, database, table).Set(float64(queueSize))
+		replicaReadonly.WithLabelValues(node, database, table).Set(float64(isReadonly))
 	}
 
-	replicasTotal.Set(float64(total))
-	replicaInsertsInQueue.Set(float64(totalInserts))
-	replicaLag.Set(maxLag)
+	replicasTotal.WithLabelValues(node).Set(float64(total))
+	replicaInsertsInQueue.WithLabelValues(node).Set(float64(totalInserts))
+	replicaLag.WithLabelValues(node).Set(maxLag)
 
 	return rows.Err()
 }

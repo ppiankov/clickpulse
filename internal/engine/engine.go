@@ -13,19 +13,25 @@ import (
 	"github.com/ppiankov/clickpulse/internal/retry"
 )
 
-// Engine runs the poll loop, executing collectors on each tick.
+// Target represents a single ClickHouse node to poll.
+type Target struct {
+	DB   *sql.DB
+	Node string // host:port label
+}
+
+// Engine runs the poll loop, executing collectors against all targets on each tick.
 type Engine struct {
-	db         *sql.DB
+	targets    []Target
 	interval   time.Duration
 	collectors []collector.Collector
 	alerter    *alerter.Alerter
 	annotator  *annotator.Annotator
 }
 
-// New creates an engine with the given database, poll interval, and collectors.
-func New(db *sql.DB, interval time.Duration, collectors []collector.Collector, a *alerter.Alerter, ann *annotator.Annotator) *Engine {
+// New creates an engine with the given targets, poll interval, and collectors.
+func New(targets []Target, interval time.Duration, collectors []collector.Collector, a *alerter.Alerter, ann *annotator.Annotator) *Engine {
 	return &Engine{
-		db:         db,
+		targets:    targets,
 		interval:   interval,
 		collectors: collectors,
 		alerter:    a,
@@ -51,38 +57,42 @@ func (e *Engine) Run(ctx context.Context) {
 }
 
 func (e *Engine) poll(ctx context.Context) {
+	for _, t := range e.targets {
+		e.pollTarget(ctx, t)
+	}
+}
+
+func (e *Engine) pollTarget(ctx context.Context, t Target) {
 	start := time.Now()
 
-	// Ping with retry — transient network issues should not immediately mark CH down.
 	pingErr := retry.Do(ctx, retry.DefaultMaxAttempts, func() error {
-		return e.db.PingContext(ctx)
+		return t.DB.PingContext(ctx)
 	})
 	if pingErr != nil {
-		metrics.Up.Set(0)
-		metrics.ScrapeErrors.Inc()
-		log.Printf("clickhouse ping failed after %d retries: %v", retry.DefaultMaxAttempts, pingErr)
-		metrics.ScrapeDuration.Set(time.Since(start).Seconds())
+		metrics.Up.WithLabelValues(t.Node).Set(0)
+		metrics.ScrapeErrors.WithLabelValues(t.Node).Inc()
+		log.Printf("[%s] ping failed after %d retries: %v", t.Node, retry.DefaultMaxAttempts, pingErr)
+		metrics.ScrapeDuration.WithLabelValues(t.Node).Set(time.Since(start).Seconds())
 		return
 	}
-	metrics.Up.Set(1)
+	metrics.Up.WithLabelValues(t.Node).Set(1)
 
 	for _, c := range e.collectors {
 		err := retry.Do(ctx, retry.DefaultMaxAttempts, func() error {
-			return c.Collect(e.db)
+			return c.Collect(t.DB, t.Node)
 		})
 		if err != nil {
-			metrics.ScrapeErrors.Inc()
-			log.Printf("collector %s failed after retries: %v", c.Name(), err)
+			metrics.ScrapeErrors.WithLabelValues(t.Node).Inc()
+			log.Printf("[%s] collector %s failed: %v", t.Node, c.Name(), err)
 		}
 	}
 
-	metrics.ScrapeDuration.Set(time.Since(start).Seconds())
+	metrics.ScrapeDuration.WithLabelValues(t.Node).Set(time.Since(start).Seconds())
 
-	// Run alerting and annotation checks after collectors.
 	if e.alerter != nil {
-		alerter.CheckAndFire(ctx, e.db, e.alerter)
+		alerter.CheckAndFire(ctx, t.DB, e.alerter)
 	}
 	if e.annotator != nil {
-		e.annotator.CheckAndAnnotate(ctx, e.db)
+		e.annotator.CheckAndAnnotate(ctx, t.DB)
 	}
 }

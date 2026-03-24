@@ -29,11 +29,18 @@ var serveCmd = &cobra.Command{
 			return fmt.Errorf("config: %w", err)
 		}
 
-		db, err := sql.Open("clickhouse", cfg.DSN)
-		if err != nil {
-			return fmt.Errorf("clickhouse open: %w", err)
+		var targets []engine.Target
+		for _, dsn := range cfg.DSNs {
+			db, err := sql.Open("clickhouse", dsn)
+			if err != nil {
+				return fmt.Errorf("clickhouse open %s: %w", dsn, err)
+			}
+			defer func() { _ = db.Close() }()
+			targets = append(targets, engine.Target{
+				DB:   db,
+				Node: config.NodeLabel(dsn),
+			})
 		}
-		defer func() { _ = db.Close() }()
 
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
@@ -56,11 +63,11 @@ var serveCmd = &cobra.Command{
 		a := alerter.New(cfg.TelegramBotToken, cfg.TelegramChatID, cfg.AlertWebhookURL, cfg.AlertCooldown)
 		ann := annotator.New(cfg.GrafanaURL, cfg.GrafanaToken, cfg.GrafanaDashboardUID, cfg.AlertCooldown)
 
-		eng := engine.New(db, cfg.PollInterval, collectors, a, ann)
+		eng := engine.New(targets, cfg.PollInterval, collectors, a, ann)
 		go eng.Run(ctx)
 
 		srv := server.New(cfg.MetricsPort)
-		log.Printf("clickpulse serving on :%d (poll every %s)", cfg.MetricsPort, cfg.PollInterval)
+		log.Printf("clickpulse serving on :%d (%d nodes, poll every %s)", cfg.MetricsPort, len(targets), cfg.PollInterval)
 
 		errCh := make(chan error, 1)
 		go func() { errCh <- srv.ListenAndServe() }()

@@ -8,26 +8,26 @@ import (
 )
 
 var (
-	mergesActive = prometheus.NewGauge(prometheus.GaugeOpts{
+	mergesActive = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_merges_active",
 		Help: "Number of currently running merges",
-	})
-	mergeBytesPerSec = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	mergeBytesPerSec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_merge_bytes_per_second",
 		Help: "Total bytes/sec across all active merges",
-	})
-	mergePartsCount = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	mergePartsCount = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_merge_parts_count",
 		Help: "Total number of parts being merged",
-	})
-	mergeElapsed = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	mergeElapsed = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_merge_elapsed_seconds",
 		Help: "Total elapsed seconds across all active merges",
-	})
-	mergeProgress = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	mergeProgress = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_merge_progress",
 		Help: "Average progress across all active merges (0-1)",
-	})
+	}, []string{"node"})
 )
 
 func init() {
@@ -41,7 +41,7 @@ func NewMerges() *Merges { return &Merges{} }
 
 func (m *Merges) Name() string { return "merges" }
 
-func (m *Merges) Collect(q Querier) error {
+func (m *Merges) Collect(q Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -62,7 +62,7 @@ func (m *Merges) Collect(q Querier) error {
 	var count int
 	var totalParts int64
 	var totalElapsed, totalProgress float64
-	var totalBytesRead, totalSize uint64
+	var totalBytesRead uint64
 
 	for rows.Next() {
 		var numParts int64
@@ -76,25 +76,24 @@ func (m *Merges) Collect(q Querier) error {
 		count++
 		totalParts += numParts
 		totalProgress += progress
-		totalSize += sizeBytes
 		totalBytesRead += bytesRead
 		totalElapsed += elapsed
 	}
 
-	mergesActive.Set(float64(count))
-	mergePartsCount.Set(float64(totalParts))
-	mergeElapsed.Set(totalElapsed)
+	mergesActive.WithLabelValues(node).Set(float64(count))
+	mergePartsCount.WithLabelValues(node).Set(float64(totalParts))
+	mergeElapsed.WithLabelValues(node).Set(totalElapsed)
 
 	if count > 0 {
-		mergeProgress.Set(totalProgress / float64(count))
+		mergeProgress.WithLabelValues(node).Set(totalProgress / float64(count))
 	} else {
-		mergeProgress.Set(0)
+		mergeProgress.WithLabelValues(node).Set(0)
 	}
 
 	if totalElapsed > 0 {
-		mergeBytesPerSec.Set(float64(totalBytesRead) / totalElapsed)
+		mergeBytesPerSec.WithLabelValues(node).Set(float64(totalBytesRead) / totalElapsed)
 	} else {
-		mergeBytesPerSec.Set(0)
+		mergeBytesPerSec.WithLabelValues(node).Set(0)
 	}
 
 	return rows.Err()

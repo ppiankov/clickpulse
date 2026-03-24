@@ -8,26 +8,26 @@ import (
 )
 
 var (
-	connections = prometheus.NewGauge(prometheus.GaugeOpts{
+	connections = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_connections",
 		Help: "Current number of TCP connections",
-	})
-	memoryTracking = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	memoryTracking = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_memory_tracking_bytes",
 		Help: "Current memory tracked by the server",
-	})
-	backgroundPoolTasks = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	backgroundPoolTasks = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_background_pool_tasks",
 		Help: "Active tasks in the background merge/mutate pool",
-	})
-	insertedRowsTotal = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	insertedRowsTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_inserted_rows_total",
 		Help: "Cumulative rows inserted (from system.events)",
-	})
-	selectedRowsTotal = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	selectedRowsTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_selected_rows_total",
 		Help: "Cumulative rows read by SELECT (from system.events)",
-	})
+	}, []string{"node"})
 )
 
 func init() {
@@ -41,15 +41,14 @@ func NewServer() *Server { return &Server{} }
 
 func (s *Server) Name() string { return "server" }
 
-func (s *Server) Collect(q Querier) error {
+func (s *Server) Collect(q Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// system.metrics — current gauges
-	metricsMap := map[string]*prometheus.Gauge{
-		"TCPConnection":                        &connections,
-		"MemoryTracking":                       &memoryTracking,
-		"BackgroundMergesAndMutationsPoolTask": &backgroundPoolTasks,
+	metricsMap := map[string]*prometheus.GaugeVec{
+		"TCPConnection":                        connections,
+		"MemoryTracking":                       memoryTracking,
+		"BackgroundMergesAndMutationsPoolTask": backgroundPoolTasks,
 	}
 
 	rows, err := q.QueryContext(ctx, `
@@ -69,17 +68,16 @@ func (s *Server) Collect(q Querier) error {
 			return err
 		}
 		if g, ok := metricsMap[metric]; ok {
-			(*g).Set(float64(value))
+			g.WithLabelValues(node).Set(float64(value))
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 
-	// system.events — cumulative counters
-	eventsMap := map[string]*prometheus.Gauge{
-		"InsertedRows": &insertedRowsTotal,
-		"SelectedRows": &selectedRowsTotal,
+	eventsMap := map[string]*prometheus.GaugeVec{
+		"InsertedRows": insertedRowsTotal,
+		"SelectedRows": selectedRowsTotal,
 	}
 
 	rows2, err := q.QueryContext(ctx, `
@@ -99,7 +97,7 @@ func (s *Server) Collect(q Querier) error {
 			return err
 		}
 		if g, ok := eventsMap[event]; ok {
-			(*g).Set(float64(value))
+			g.WithLabelValues(node).Set(float64(value))
 		}
 	}
 

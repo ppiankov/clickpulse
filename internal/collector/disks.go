@@ -11,15 +11,15 @@ var (
 	diskBytesTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_disk_bytes_total",
 		Help: "Total bytes on disk",
-	}, []string{"disk"})
+	}, []string{"node", "disk"})
 	diskBytesFree = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_disk_bytes_free",
 		Help: "Free bytes on disk",
-	}, []string{"disk"})
+	}, []string{"node", "disk"})
 	diskUsedRatio = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_disk_used_ratio",
 		Help: "Fraction of disk space used (0-1)",
-	}, []string{"disk"})
+	}, []string{"node", "disk"})
 )
 
 func init() {
@@ -33,7 +33,7 @@ func NewDisks() *Disks { return &Disks{} }
 
 func (d *Disks) Name() string { return "disks" }
 
-func (d *Disks) Collect(q Querier) error {
+func (d *Disks) Collect(q Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -49,10 +49,6 @@ func (d *Disks) Collect(q Querier) error {
 	}
 	defer func() { _ = rows.Close() }()
 
-	diskBytesTotal.Reset()
-	diskBytesFree.Reset()
-	diskUsedRatio.Reset()
-
 	for rows.Next() {
 		var name string
 		var total, free uint64
@@ -60,12 +56,12 @@ func (d *Disks) Collect(q Querier) error {
 			return err
 		}
 
-		diskBytesTotal.WithLabelValues(name).Set(float64(total))
-		diskBytesFree.WithLabelValues(name).Set(float64(free))
+		diskBytesTotal.WithLabelValues(node, name).Set(float64(total))
+		diskBytesFree.WithLabelValues(node, name).Set(float64(free))
 
 		if total > 0 {
 			used := float64(total-free) / float64(total)
-			diskUsedRatio.WithLabelValues(name).Set(used)
+			diskUsedRatio.WithLabelValues(node, name).Set(used)
 		}
 	}
 

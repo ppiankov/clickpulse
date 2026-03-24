@@ -9,18 +9,18 @@ import (
 )
 
 var (
-	queryRegressions = prometheus.NewGauge(prometheus.GaugeOpts{
+	queryRegressions = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_query_regressions",
 		Help: "Number of queries whose mean time regressed above threshold since last poll",
-	})
+	}, []string{"node"})
 	queryMeanTimeChangeRatio = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_query_mean_time_change_ratio",
 		Help: "Ratio of current mean query time to previous mean (>1 = slower)",
-	}, []string{"query_hash"})
+	}, []string{"node", "query_hash"})
 	queryCallsDelta = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_query_calls_delta",
 		Help: "Change in call count since last poll",
-	}, []string{"query_hash"})
+	}, []string{"node", "query_hash"})
 )
 
 func init() {
@@ -37,23 +37,21 @@ type QueryLog struct {
 	threshold float64
 	limit     int
 	mu        sync.Mutex
-	prev      map[string]queryStats // keyed by normalized_query_hash
+	prev      map[string]map[string]queryStats // keyed by node, then query_hash
 }
 
 // NewQueryLog creates a query log collector.
-// threshold is the ratio above which a query is flagged as regressed (e.g. 2.0 = 2x slower).
-// limit caps the number of query fingerprints tracked.
 func NewQueryLog(threshold float64, limit int) *QueryLog {
 	return &QueryLog{
 		threshold: threshold,
 		limit:     limit,
-		prev:      make(map[string]queryStats),
+		prev:      make(map[string]map[string]queryStats),
 	}
 }
 
 func (q *QueryLog) Name() string { return "querylog" }
 
-func (q *QueryLog) Collect(querier Querier) error {
+func (q *QueryLog) Collect(querier Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -92,27 +90,29 @@ func (q *QueryLog) Collect(querier Querier) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	prevNode := q.prev[node]
 	regressionCount := 0
-	queryMeanTimeChangeRatio.Reset()
-	queryCallsDelta.Reset()
 
 	for hash, cur := range current {
-		prev, ok := q.prev[hash]
+		if prevNode == nil {
+			continue
+		}
+		prev, ok := prevNode[hash]
 		if !ok || prev.meanTime == 0 {
 			continue
 		}
 
 		ratio := cur.meanTime / prev.meanTime
-		queryMeanTimeChangeRatio.WithLabelValues(hash).Set(ratio)
-		queryCallsDelta.WithLabelValues(hash).Set(float64(cur.calls - prev.calls))
+		queryMeanTimeChangeRatio.WithLabelValues(node, hash).Set(ratio)
+		queryCallsDelta.WithLabelValues(node, hash).Set(float64(cur.calls - prev.calls))
 
 		if ratio >= q.threshold {
 			regressionCount++
 		}
 	}
 
-	queryRegressions.Set(float64(regressionCount))
-	q.prev = current
+	queryRegressions.WithLabelValues(node).Set(float64(regressionCount))
+	q.prev[node] = current
 
 	return nil
 }

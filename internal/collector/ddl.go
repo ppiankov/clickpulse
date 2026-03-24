@@ -8,18 +8,18 @@ import (
 )
 
 var (
-	ddlQueueSize = prometheus.NewGauge(prometheus.GaugeOpts{
+	ddlQueueSize = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_ddl_queue_size",
 		Help: "Number of entries in the distributed DDL queue",
-	})
-	ddlQueueStuck = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	ddlQueueStuck = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_ddl_queue_stuck",
 		Help: "Number of DDL entries that appear stuck (not finished, older than threshold)",
-	})
-	ddlOldestEntry = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	ddlOldestEntry = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_ddl_oldest_entry_seconds",
 		Help: "Age of the oldest pending DDL entry in seconds",
-	})
+	}, []string{"node"})
 )
 
 func init() {
@@ -35,11 +35,10 @@ func NewDDL() *DDL { return &DDL{} }
 
 func (d *DDL) Name() string { return "ddl" }
 
-func (d *DDL) Collect(q Querier) error {
+func (d *DDL) Collect(q Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Check if the table exists (only available in clustered setups).
 	var exists int
 	if err := q.QueryRowContext(ctx, `
 		SELECT count()
@@ -49,7 +48,7 @@ func (d *DDL) Collect(q Querier) error {
 		return err
 	}
 	if exists == 0 {
-		return nil // Not a cluster setup
+		return nil
 	}
 
 	rows, err := q.QueryContext(ctx, `
@@ -86,9 +85,9 @@ func (d *DDL) Collect(q Querier) error {
 		}
 	}
 
-	ddlQueueSize.Set(float64(total))
-	ddlQueueStuck.Set(float64(stuck))
-	ddlOldestEntry.Set(oldestAge)
+	ddlQueueSize.WithLabelValues(node).Set(float64(total))
+	ddlQueueStuck.WithLabelValues(node).Set(float64(stuck))
+	ddlOldestEntry.WithLabelValues(node).Set(oldestAge)
 
 	return rows.Err()
 }

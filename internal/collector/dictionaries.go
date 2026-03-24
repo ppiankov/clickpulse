@@ -11,19 +11,19 @@ var (
 	dictionaryStatus = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_dictionary_status",
 		Help: "Dictionary load status: 1=loaded, 0=not_loaded, -1=failed",
-	}, []string{"name"})
+	}, []string{"node", "name"})
 	dictionaryBytes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_dictionary_bytes",
 		Help: "Memory used by the dictionary in bytes",
-	}, []string{"name"})
+	}, []string{"node", "name"})
 	dictionaryRows = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_dictionary_rows",
 		Help: "Number of rows in the dictionary",
-	}, []string{"name"})
+	}, []string{"node", "name"})
 	dictionaryLoadDuration = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_dictionary_load_duration_seconds",
 		Help: "Time taken to load the dictionary",
-	}, []string{"name"})
+	}, []string{"node", "name"})
 )
 
 func init() {
@@ -37,7 +37,7 @@ func NewDictionaries() *Dictionaries { return &Dictionaries{} }
 
 func (d *Dictionaries) Name() string { return "dictionaries" }
 
-func (d *Dictionaries) Collect(q Querier) error {
+func (d *Dictionaries) Collect(q Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -54,11 +54,6 @@ func (d *Dictionaries) Collect(q Querier) error {
 		return err
 	}
 	defer func() { _ = rows.Close() }()
-
-	dictionaryStatus.Reset()
-	dictionaryBytes.Reset()
-	dictionaryRows.Reset()
-	dictionaryLoadDuration.Reset()
 
 	for rows.Next() {
 		var name, status string
@@ -78,10 +73,10 @@ func (d *Dictionaries) Collect(q Querier) error {
 			statusVal = 0
 		}
 
-		dictionaryStatus.WithLabelValues(name).Set(statusVal)
-		dictionaryBytes.WithLabelValues(name).Set(float64(bytes))
-		dictionaryRows.WithLabelValues(name).Set(float64(elementCount))
-		dictionaryLoadDuration.WithLabelValues(name).Set(loadDuration)
+		dictionaryStatus.WithLabelValues(node, name).Set(statusVal)
+		dictionaryBytes.WithLabelValues(node, name).Set(float64(bytes))
+		dictionaryRows.WithLabelValues(node, name).Set(float64(elementCount))
+		dictionaryLoadDuration.WithLabelValues(node, name).Set(loadDuration)
 	}
 
 	return rows.Err()

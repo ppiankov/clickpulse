@@ -11,19 +11,19 @@ var (
 	partsPerPartition = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_parts_per_partition",
 		Help: "Number of active parts per partition (high counts indicate insert pressure)",
-	}, []string{"database", "table", "partition"})
+	}, []string{"node", "database", "table", "partition"})
 	partsTotal = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_parts_total",
 		Help: "Total active parts per table",
-	}, []string{"database", "table"})
+	}, []string{"node", "database", "table"})
 	partsBytes = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_parts_bytes",
 		Help: "Total compressed bytes per table",
-	}, []string{"database", "table"})
+	}, []string{"node", "database", "table"})
 	partsCompressionRatio = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_parts_compression_ratio",
 		Help: "Compression ratio (uncompressed/compressed) per table",
-	}, []string{"database", "table"})
+	}, []string{"node", "database", "table"})
 )
 
 func init() {
@@ -37,11 +37,10 @@ func NewParts() *Parts { return &Parts{} }
 
 func (p *Parts) Name() string { return "parts" }
 
-func (p *Parts) Collect(q Querier) error {
+func (p *Parts) Collect(q Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Aggregate per partition for part counts, per table for bytes/ratio.
 	rows, err := q.QueryContext(ctx, `
 		SELECT
 			database,
@@ -59,12 +58,6 @@ func (p *Parts) Collect(q Querier) error {
 	}
 	defer func() { _ = rows.Close() }()
 
-	partsPerPartition.Reset()
-	partsTotal.Reset()
-	partsBytes.Reset()
-	partsCompressionRatio.Reset()
-
-	// Accumulate per-table totals from per-partition rows.
 	type tableKey struct{ db, table string }
 	type tableStats struct {
 		parts        int64
@@ -81,7 +74,7 @@ func (p *Parts) Collect(q Querier) error {
 			return err
 		}
 
-		partsPerPartition.WithLabelValues(database, table, partition).Set(float64(partCount))
+		partsPerPartition.WithLabelValues(node, database, table, partition).Set(float64(partCount))
 
 		key := tableKey{database, table}
 		s, ok := tables[key]
@@ -95,11 +88,11 @@ func (p *Parts) Collect(q Querier) error {
 	}
 
 	for key, s := range tables {
-		partsTotal.WithLabelValues(key.db, key.table).Set(float64(s.parts))
-		partsBytes.WithLabelValues(key.db, key.table).Set(float64(s.compressed))
+		partsTotal.WithLabelValues(node, key.db, key.table).Set(float64(s.parts))
+		partsBytes.WithLabelValues(node, key.db, key.table).Set(float64(s.compressed))
 
 		if s.compressed > 0 {
-			partsCompressionRatio.WithLabelValues(key.db, key.table).Set(float64(s.uncompressed) / float64(s.compressed))
+			partsCompressionRatio.WithLabelValues(node, key.db, key.table).Set(float64(s.uncompressed) / float64(s.compressed))
 		}
 	}
 

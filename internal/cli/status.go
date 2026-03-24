@@ -21,48 +21,55 @@ var statusCmd = &cobra.Command{
 			return fmt.Errorf("config: %w", err)
 		}
 
-		db, err := sql.Open("clickhouse", cfg.DSN)
-		if err != nil {
-			return fmt.Errorf("clickhouse open: %w", err)
-		}
-		defer func() { _ = db.Close() }()
-
-		s, err := snapshot.Take(cmd.Context(), db)
-		if err != nil {
-			return fmt.Errorf("snapshot: %w", err)
-		}
-
 		format, _ := cmd.Flags().GetString("format")
-		if format == "json" {
-			out := map[string]any{
-				"version":         s.Version,
-				"uptime_seconds":  s.Uptime.Seconds(),
-				"active_queries":  s.ActiveQueries,
-				"slow_queries":    s.SlowQueries,
-				"active_merges":   s.ActiveMerges,
-				"merge_bytes_ps":  s.MergeBytesPS,
-				"replica_lag":     s.ReplicaLag,
-				"readonly_tables": s.ReadonlyTables,
-				"total_parts":     s.TotalParts,
-				"keeper_ok":       s.KeeperOK,
+
+		for _, dsn := range cfg.DSNs {
+			node := config.NodeLabel(dsn)
+			db, err := sql.Open("clickhouse", dsn)
+			if err != nil {
+				return fmt.Errorf("clickhouse open %s: %w", node, err)
 			}
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(out)
-		}
 
-		w := cmd.OutOrStdout()
-		_, _ = fmt.Fprintf(w, "ClickHouse %s (up %s)\n\n", s.Version, s.Uptime)
-		_, _ = fmt.Fprintf(w, "  Queries:    %d active, %d slow\n", s.ActiveQueries, s.SlowQueries)
-		_, _ = fmt.Fprintf(w, "  Merges:     %d active (%.1f MB/s)\n", s.ActiveMerges, s.MergeBytesPS/1024/1024)
-		_, _ = fmt.Fprintf(w, "  Replication: %.0fs lag, %d readonly\n", s.ReplicaLag, s.ReadonlyTables)
-		_, _ = fmt.Fprintf(w, "  Parts:      %d active\n", s.TotalParts)
+			s, err := snapshot.Take(cmd.Context(), db)
+			_ = db.Close()
+			if err != nil {
+				return fmt.Errorf("[%s] snapshot: %w", node, err)
+			}
 
-		keeper := "ok"
-		if !s.KeeperOK {
-			keeper = "unreachable"
+			if format == "json" {
+				out := map[string]any{
+					"node":            node,
+					"version":         s.Version,
+					"uptime_seconds":  s.Uptime.Seconds(),
+					"active_queries":  s.ActiveQueries,
+					"slow_queries":    s.SlowQueries,
+					"active_merges":   s.ActiveMerges,
+					"merge_bytes_ps":  s.MergeBytesPS,
+					"replica_lag":     s.ReplicaLag,
+					"readonly_tables": s.ReadonlyTables,
+					"total_parts":     s.TotalParts,
+					"keeper_ok":       s.KeeperOK,
+				}
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(out); err != nil {
+					return err
+				}
+			} else {
+				w := cmd.OutOrStdout()
+				_, _ = fmt.Fprintf(w, "Node: %s — ClickHouse %s (up %s)\n", node, s.Version, s.Uptime)
+				_, _ = fmt.Fprintf(w, "  Queries:    %d active, %d slow\n", s.ActiveQueries, s.SlowQueries)
+				_, _ = fmt.Fprintf(w, "  Merges:     %d active (%.1f MB/s)\n", s.ActiveMerges, s.MergeBytesPS/1024/1024)
+				_, _ = fmt.Fprintf(w, "  Replication: %.0fs lag, %d readonly\n", s.ReplicaLag, s.ReadonlyTables)
+				_, _ = fmt.Fprintf(w, "  Parts:      %d active\n", s.TotalParts)
+
+				keeper := "ok"
+				if !s.KeeperOK {
+					keeper = "unreachable"
+				}
+				_, _ = fmt.Fprintf(w, "  Keeper:     %s\n\n", keeper)
+			}
 		}
-		_, _ = fmt.Fprintf(w, "  Keeper:     %s\n", keeper)
 
 		return nil
 	},

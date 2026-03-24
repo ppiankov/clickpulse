@@ -2,14 +2,16 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
 // Config holds all clickpulse configuration.
 type Config struct {
-	// ClickHouse connection
-	DSN string
+	// ClickHouse connections (one or more nodes)
+	DSNs []string
 
 	// HTTP server
 	MetricsPort int
@@ -36,16 +38,21 @@ type Config struct {
 
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {
-	dsn := os.Getenv("CLICKHOUSE_DSN")
-	if dsn == "" {
-		dsn = os.Getenv("DATABASE_URL")
+	raw := os.Getenv("CLICKHOUSE_DSN")
+	if raw == "" {
+		raw = os.Getenv("DATABASE_URL")
 	}
-	if dsn == "" {
+	if raw == "" {
 		return nil, fmt.Errorf("CLICKHOUSE_DSN or DATABASE_URL is required")
 	}
 
+	dsns := strings.Split(raw, ",")
+	for i := range dsns {
+		dsns[i] = strings.TrimSpace(dsns[i])
+	}
+
 	return &Config{
-		DSN:                 dsn,
+		DSNs:                dsns,
 		MetricsPort:         envInt("METRICS_PORT", 9188),
 		PollInterval:        envDuration("POLL_INTERVAL", 5*time.Second),
 		SlowQueryThreshold:  envDuration("SLOW_QUERY_THRESHOLD", 5*time.Second),
@@ -59,6 +66,15 @@ func Load() (*Config, error) {
 		GrafanaToken:        os.Getenv("GRAFANA_TOKEN"),
 		GrafanaDashboardUID: os.Getenv("GRAFANA_DASHBOARD_UID"),
 	}, nil
+}
+
+// NodeLabel extracts the host:port from a ClickHouse DSN for use as a metric label.
+func NodeLabel(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil || u.Host == "" {
+		return dsn
+	}
+	return u.Host
 }
 
 func envInt(key string, def int) int {

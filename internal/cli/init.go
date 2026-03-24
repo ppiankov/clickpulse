@@ -8,8 +8,10 @@ import (
 
 const defaultEnvConfig = `# clickpulse configuration (environment variables)
 
-# Required: ClickHouse connection string
+# Required: ClickHouse connection string (comma-separated for multi-node)
 CLICKHOUSE_DSN=clickhouse://default:@localhost:9000/default
+# Multi-node example:
+# CLICKHOUSE_DSN=clickhouse://default:@ch1:9000/default,clickhouse://default:@ch2:9000/default,clickhouse://default:@ch3:9000/default
 
 # HTTP server port for /metrics and /healthz
 METRICS_PORT=9188

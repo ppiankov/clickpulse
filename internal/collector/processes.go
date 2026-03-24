@@ -8,30 +8,30 @@ import (
 )
 
 var (
-	activeQueries = prometheus.NewGauge(prometheus.GaugeOpts{
+	activeQueries = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_active_queries",
 		Help: "Number of currently executing queries",
-	})
+	}, []string{"node"})
 	queriesByType = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_queries_by_type",
 		Help: "Active queries grouped by type (SELECT, INSERT, ALTER, etc)",
-	}, []string{"type"})
-	slowQueries = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node", "type"})
+	slowQueries = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_slow_queries",
 		Help: "Number of currently running slow queries",
-	})
-	longestQuery = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	longestQuery = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_longest_query_seconds",
 		Help: "Duration of the longest running query in seconds",
-	})
-	queryMemory = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	queryMemory = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_query_memory_bytes",
 		Help: "Total memory used by all running queries",
-	})
-	waitingQueries = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	waitingQueries = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_waiting_queries",
 		Help: "Number of queries waiting for locks or resources",
-	})
+	}, []string{"node"})
 )
 
 func init() {
@@ -50,7 +50,7 @@ func NewProcesses(slowThreshold time.Duration) *Processes {
 
 func (p *Processes) Name() string { return "processes" }
 
-func (p *Processes) Collect(q Querier) error {
+func (p *Processes) Collect(q Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -100,15 +100,14 @@ func (p *Processes) Collect(q Querier) error {
 		}
 	}
 
-	activeQueries.Set(float64(total))
-	slowQueries.Set(float64(slow))
-	longestQuery.Set(maxElapsed)
-	queryMemory.Set(float64(totalMem))
-	waitingQueries.Set(float64(waiting))
+	activeQueries.WithLabelValues(node).Set(float64(total))
+	slowQueries.WithLabelValues(node).Set(float64(slow))
+	longestQuery.WithLabelValues(node).Set(maxElapsed)
+	queryMemory.WithLabelValues(node).Set(float64(totalMem))
+	waitingQueries.WithLabelValues(node).Set(float64(waiting))
 
-	queriesByType.Reset()
 	for kind, count := range typeCounts {
-		queriesByType.WithLabelValues(kind).Set(float64(count))
+		queriesByType.WithLabelValues(node, kind).Set(float64(count))
 	}
 
 	return rows.Err()

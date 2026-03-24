@@ -8,18 +8,18 @@ import (
 )
 
 var (
-	mutationsActive = prometheus.NewGauge(prometheus.GaugeOpts{
+	mutationsActive = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_mutations_active",
 		Help: "Number of currently running mutations",
-	})
-	mutationsStuck = prometheus.NewGauge(prometheus.GaugeOpts{
+	}, []string{"node"})
+	mutationsStuck = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_mutations_stuck",
 		Help: "Number of mutations that appear stuck (not done, running > threshold)",
-	})
+	}, []string{"node"})
 	mutationPartsRemaining = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_mutation_parts_remaining",
 		Help: "Parts remaining to process per active mutation",
-	}, []string{"database", "table"})
+	}, []string{"node", "database", "table"})
 )
 
 func init() {
@@ -35,7 +35,7 @@ func NewMutations() *Mutations { return &Mutations{} }
 
 func (m *Mutations) Name() string { return "mutations" }
 
-func (m *Mutations) Collect(q Querier) error {
+func (m *Mutations) Collect(q Querier, node string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -55,7 +55,6 @@ func (m *Mutations) Collect(q Querier) error {
 	defer func() { _ = rows.Close() }()
 
 	var active, stuck int
-	mutationPartsRemaining.Reset()
 
 	now := time.Now()
 	for rows.Next() {
@@ -68,15 +67,15 @@ func (m *Mutations) Collect(q Querier) error {
 		}
 
 		active++
-		mutationPartsRemaining.WithLabelValues(database, table).Add(float64(partsToDo))
+		mutationPartsRemaining.WithLabelValues(node, database, table).Add(float64(partsToDo))
 
 		if now.Sub(createTime) > stuckThreshold {
 			stuck++
 		}
 	}
 
-	mutationsActive.Set(float64(active))
-	mutationsStuck.Set(float64(stuck))
+	mutationsActive.WithLabelValues(node).Set(float64(active))
+	mutationsStuck.WithLabelValues(node).Set(float64(stuck))
 
 	return rows.Err()
 }

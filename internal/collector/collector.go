@@ -6,6 +6,6 @@ type Collector interface {
 	Name() string
 
 	// Collect gathers metrics from ClickHouse system tables.
-	// It should update Prometheus metrics directly.
-	Collect(q Querier) error
+	// node is the host:port label identifying which ClickHouse node is being polled.
+	Collect(q Querier, node string) error
 }
