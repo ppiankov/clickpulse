@@ -8,6 +8,8 @@ image:
 clickhouse:
   dsn: ""
 
+keeperEndpoints: ""
+
 metricsPort: 9188
 pollInterval: "5s"
 slowQueryThreshold: "5s"
