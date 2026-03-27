@@ -14,6 +14,7 @@ import (
 // Alert represents a single alert event.
 type Alert struct {
 	Name    string
+	Host    string
 	Message string
 }
 
@@ -59,7 +60,8 @@ func (a *Alerter) Fire(ctx context.Context, alert Alert) {
 	a.mu.Unlock()
 
 	if a.telegramToken != "" && a.telegramChat != "" {
-		if err := a.sendTelegram(ctx, alert.Message); err != nil {
+		text := fmt.Sprintf("clickpulse [%s]: %s\n\n%s", alert.Host, alert.Name, alert.Message)
+		if err := a.sendTelegram(ctx, text); err != nil {
 			log.Printf("telegram alert failed: %v", err)
 		}
 	}
@@ -100,7 +102,9 @@ func (a *Alerter) sendTelegram(ctx context.Context, text string) error {
 func (a *Alerter) sendWebhook(ctx context.Context, alert Alert) error {
 	payload := map[string]string{
 		"name":    alert.Name,
+		"host":    alert.Host,
 		"message": alert.Message,
+		"text":    fmt.Sprintf("clickpulse [%s]: %s — %s", alert.Host, alert.Name, alert.Message),
 	}
 	body, _ := json.Marshal(payload)
 

@@ -90,7 +90,7 @@ func (e *Engine) pollTarget(ctx context.Context, t Target) {
 	metrics.ScrapeDuration.WithLabelValues(t.Node).Set(time.Since(start).Seconds())
 
 	if e.alerter != nil {
-		alerter.CheckAndFire(ctx, t.DB, e.alerter)
+		alerter.CheckAndFire(ctx, t.DB, e.alerter, t.Node)
 	}
 	if e.annotator != nil {
 		e.annotator.CheckAndAnnotate(ctx, t.DB)
