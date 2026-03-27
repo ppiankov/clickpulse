@@ -9,7 +9,7 @@
   ],
   "title": "clickpulse — ClickHouse Health",
   "uid": "clickpulse",
-  "version": 1,
+  "version": 2,
   "schemaVersion": 39,
   "timezone": "browser",
   "refresh": "30s",
@@ -21,6 +21,30 @@
         "type": "datasource",
         "query": "prometheus",
         "current": {}
+      },
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": { "uid": "${datasource}" },
+        "query": "label_values(clickhouse_up, service)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" },
+        "sort": 1
+      },
+      {
+        "name": "instance",
+        "type": "query",
+        "datasource": { "uid": "${datasource}" },
+        "query": "label_values(clickhouse_up{service=~\"$service\"}, instance)",
+        "refresh": 2,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" },
+        "sort": 1
       }
     ]
   },
@@ -36,7 +60,7 @@
       "type": "stat",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 4, "w": 3, "x": 0, "y": 1 },
-      "targets": [{ "expr": "clickhouse_up", "legendFormat": "" }],
+      "targets": [{ "expr": "clickhouse_up{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }}" }],
       "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "value": 0, "color": "red" }, { "value": 1, "color": "green" }] }, "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN" }, "1": { "text": "UP" } } }] } }
     },
     {
@@ -44,21 +68,21 @@
       "type": "stat",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 4, "w": 3, "x": 3, "y": 1 },
-      "targets": [{ "expr": "clickhouse_active_queries", "legendFormat": "" }]
+      "targets": [{ "expr": "sum(clickhouse_active_queries{service=~\"$service\", instance=~\"$instance\"})", "legendFormat": "" }]
     },
     {
       "title": "Active Merges",
       "type": "stat",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 4, "w": 3, "x": 6, "y": 1 },
-      "targets": [{ "expr": "clickhouse_merges_active", "legendFormat": "" }]
+      "targets": [{ "expr": "sum(clickhouse_merges_active{service=~\"$service\", instance=~\"$instance\"})", "legendFormat": "" }]
     },
     {
       "title": "Replica Lag",
       "type": "stat",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 4, "w": 3, "x": 9, "y": 1 },
-      "targets": [{ "expr": "clickhouse_replica_lag_seconds", "legendFormat": "" }],
+      "targets": [{ "expr": "max(clickhouse_replica_lag_seconds{service=~\"$service\", instance=~\"$instance\"})", "legendFormat": "" }],
       "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 10, "color": "yellow" }, { "value": 30, "color": "red" }] } } }
     },
     {
@@ -66,14 +90,14 @@
       "type": "stat",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 4, "w": 3, "x": 12, "y": 1 },
-      "targets": [{ "expr": "clickhouse_connections", "legendFormat": "" }]
+      "targets": [{ "expr": "sum(clickhouse_connections{service=~\"$service\", instance=~\"$instance\"})", "legendFormat": "" }]
     },
     {
       "title": "Memory",
       "type": "stat",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 4, "w": 3, "x": 15, "y": 1 },
-      "targets": [{ "expr": "clickhouse_memory_tracking_bytes", "legendFormat": "" }],
+      "targets": [{ "expr": "sum(clickhouse_memory_tracking_bytes{service=~\"$service\", instance=~\"$instance\"})", "legendFormat": "" }],
       "fieldConfig": { "defaults": { "unit": "bytes" } }
     },
     {
@@ -81,7 +105,7 @@
       "type": "stat",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 4, "w": 3, "x": 18, "y": 1 },
-      "targets": [{ "expr": "clickhouse_scrape_duration_seconds", "legendFormat": "" }],
+      "targets": [{ "expr": "max(clickhouse_scrape_duration_seconds{service=~\"$service\", instance=~\"$instance\"})", "legendFormat": "" }],
       "fieldConfig": { "defaults": { "unit": "s" } }
     },
     {
@@ -89,7 +113,7 @@
       "type": "stat",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 4, "w": 3, "x": 21, "y": 1 },
-      "targets": [{ "expr": "rate(clickhouse_scrape_errors_total[5m])", "legendFormat": "" }],
+      "targets": [{ "expr": "sum(rate(clickhouse_scrape_errors_total{service=~\"$service\", instance=~\"$instance\"}[5m]))", "legendFormat": "" }],
       "fieldConfig": { "defaults": { "unit": "err/s" } }
     },
     {
@@ -103,7 +127,7 @@
       "type": "timeseries",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
-      "targets": [{ "expr": "clickhouse_queries_by_type", "legendFormat": "{{ type }}" }]
+      "targets": [{ "expr": "clickhouse_queries_by_type{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} {{ type }}" }]
     },
     {
       "title": "Slow & Waiting Queries",
@@ -111,9 +135,9 @@
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "targets": [
-        { "expr": "clickhouse_slow_queries", "legendFormat": "slow" },
-        { "expr": "clickhouse_waiting_queries", "legendFormat": "waiting" },
-        { "expr": "clickhouse_longest_query_seconds", "legendFormat": "longest (s)" }
+        { "expr": "clickhouse_slow_queries{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} slow" },
+        { "expr": "clickhouse_waiting_queries{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} waiting" },
+        { "expr": "clickhouse_longest_query_seconds{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} longest (s)" }
       ]
     },
     {
@@ -128,8 +152,8 @@
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "targets": [
-        { "expr": "clickhouse_merges_active", "legendFormat": "active" },
-        { "expr": "clickhouse_merge_progress", "legendFormat": "avg progress" }
+        { "expr": "clickhouse_merges_active{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} active" },
+        { "expr": "clickhouse_merge_progress{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} avg progress" }
       ]
     },
     {
@@ -138,8 +162,8 @@
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "targets": [
-        { "expr": "clickhouse_mutations_active", "legendFormat": "active" },
-        { "expr": "clickhouse_mutations_stuck", "legendFormat": "stuck" }
+        { "expr": "clickhouse_mutations_active{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} active" },
+        { "expr": "clickhouse_mutations_stuck{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} stuck" }
       ]
     },
     {
@@ -153,7 +177,7 @@
       "type": "timeseries",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-      "targets": [{ "expr": "clickhouse_replica_queue_size", "legendFormat": "{{ database }}.{{ table }}" }]
+      "targets": [{ "expr": "clickhouse_replica_queue_size{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} {{ database }}.{{ table }}" }]
     },
     {
       "title": "Replica Lag & Readonly",
@@ -161,8 +185,8 @@
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
       "targets": [
-        { "expr": "clickhouse_replica_lag_seconds", "legendFormat": "lag" },
-        { "expr": "sum(clickhouse_replica_readonly)", "legendFormat": "readonly tables" }
+        { "expr": "clickhouse_replica_lag_seconds{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} lag" },
+        { "expr": "sum by (instance) (clickhouse_replica_readonly{service=~\"$service\", instance=~\"$instance\"})", "legendFormat": "{{ instance }} readonly" }
       ]
     },
     {
@@ -171,9 +195,9 @@
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
       "targets": [
-        { "expr": "clickhouse_replication_part_count_diff", "legendFormat": "part diff {{ database }}.{{ table }}" },
-        { "expr": "clickhouse_replication_leaderless_tables", "legendFormat": "leaderless {{ database }}.{{ table }}" },
-        { "expr": "clickhouse_replication_unreplicated_tables", "legendFormat": "unreplicated {{ database }}.{{ table }}" }
+        { "expr": "clickhouse_replication_part_count_diff{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} part diff {{ database }}.{{ table }}" },
+        { "expr": "clickhouse_replication_leaderless_tables{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} leaderless {{ database }}.{{ table }}" },
+        { "expr": "clickhouse_replication_unreplicated_tables{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} unreplicated {{ database }}.{{ table }}" }
       ]
     },
     {
@@ -187,7 +211,7 @@
       "type": "timeseries",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
-      "targets": [{ "expr": "topk(10, clickhouse_parts_per_partition)", "legendFormat": "{{ database }}.{{ table }}/{{ partition }}" }]
+      "targets": [{ "expr": "topk(10, clickhouse_parts_per_partition{service=~\"$service\", instance=~\"$instance\"})", "legendFormat": "{{ instance }} {{ database }}.{{ table }}/{{ partition }}" }]
     },
     {
       "title": "Disk Usage",
@@ -195,7 +219,7 @@
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
       "targets": [
-        { "expr": "clickhouse_disk_used_ratio", "legendFormat": "{{ disk }} used" }
+        { "expr": "clickhouse_disk_used_ratio{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} {{ disk }}" }
       ],
       "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 0.8, "color": "yellow" }, { "value": 0.95, "color": "red" }] } } }
     },
@@ -211,9 +235,9 @@
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 50 },
       "targets": [
-        { "expr": "clickhouse_keeper_outstanding_requests", "legendFormat": "outstanding" },
-        { "expr": "clickhouse_keeper_znode_count", "legendFormat": "znodes" },
-        { "expr": "clickhouse_keeper_latency_seconds", "legendFormat": "latency" }
+        { "expr": "clickhouse_keeper_outstanding_requests{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ keeper }} outstanding" },
+        { "expr": "clickhouse_keeper_znode_count{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ keeper }} znodes" },
+        { "expr": "clickhouse_keeper_latency_seconds{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ keeper }} latency" }
       ]
     },
     {
@@ -222,9 +246,9 @@
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 50 },
       "targets": [
-        { "expr": "clickhouse_ddl_queue_size", "legendFormat": "queue size" },
-        { "expr": "clickhouse_ddl_queue_stuck", "legendFormat": "stuck" },
-        { "expr": "clickhouse_ddl_oldest_entry_seconds", "legendFormat": "oldest (s)" }
+        { "expr": "clickhouse_ddl_queue_size{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} queue size" },
+        { "expr": "clickhouse_ddl_queue_stuck{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} stuck" },
+        { "expr": "clickhouse_ddl_oldest_entry_seconds{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} oldest (s)" }
       ]
     },
     {
@@ -238,7 +262,7 @@
       "type": "timeseries",
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 59 },
-      "targets": [{ "expr": "clickhouse_query_regressions", "legendFormat": "regressions" }]
+      "targets": [{ "expr": "clickhouse_query_regressions{service=~\"$service\", instance=~\"$instance\"}", "legendFormat": "{{ instance }} regressions" }]
     },
     {
       "title": "Throughput",
@@ -246,8 +270,8 @@
       "datasource": { "uid": "${datasource}" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 59 },
       "targets": [
-        { "expr": "rate(clickhouse_inserted_rows_total[5m])", "legendFormat": "inserts/s" },
-        { "expr": "rate(clickhouse_selected_rows_total[5m])", "legendFormat": "selects/s" }
+        { "expr": "sum by (instance) (rate(clickhouse_inserted_rows_total{service=~\"$service\", instance=~\"$instance\"}[5m]))", "legendFormat": "{{ instance }} inserts/s" },
+        { "expr": "sum by (instance) (rate(clickhouse_selected_rows_total{service=~\"$service\", instance=~\"$instance\"}[5m]))", "legendFormat": "{{ instance }} selects/s" }
       ]
     }
   ]
