@@ -17,8 +17,8 @@ func TestCumulativeEventCountersObserveDeltasAndResets(t *testing.T) {
 		Name: "test_inserted_rows_total",
 		Help: "Test counter",
 	}, []string{"node"})
-	counters := newCumulativeEventCounters(map[string]*prometheus.CounterVec{
-		eventInsertedRows: counter,
+	counters := newCumulativeEventCounters(map[string]eventCounter{
+		eventInsertedRows: {counter: counter},
 	})
 
 	counters.Observe(testNodeA, eventInsertedRows, 10)
@@ -42,8 +42,8 @@ func TestCumulativeEventCountersIsolatesNodesAndUnknownEvents(t *testing.T) {
 		Name: "test_selected_rows_total",
 		Help: "Test counter",
 	}, []string{"node"})
-	counters := newCumulativeEventCounters(map[string]*prometheus.CounterVec{
-		eventSelectedRows: counter,
+	counters := newCumulativeEventCounters(map[string]eventCounter{
+		eventSelectedRows: {counter: counter},
 	})
 
 	counters.Observe(testNodeA, eventSelectedRows, 100)
@@ -55,11 +55,29 @@ func TestCumulativeEventCountersIsolatesNodesAndUnknownEvents(t *testing.T) {
 	assertCounterValue(t, counter, testNodeB, 0)
 }
 
-func assertCounterValue(t *testing.T, counter *prometheus.CounterVec, node string, want float64) {
+func TestCumulativeEventCountersAddsConfiguredLabels(t *testing.T) {
+	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "test_kafka_failures_total",
+		Help: "Test counter",
+	}, []string{"node", "type"})
+	counters := newCumulativeEventCounters(map[string]eventCounter{
+		eventKafkaCommitFailures: {
+			counter: counter,
+			labels:  []string{"commit"},
+		},
+	})
+
+	counters.Observe(testNodeA, eventKafkaCommitFailures, 2)
+	counters.Observe(testNodeA, eventKafkaCommitFailures, 7)
+
+	assertCounterValue(t, counter, testNodeA, 5, "commit")
+}
+
+func assertCounterValue(t *testing.T, counter *prometheus.CounterVec, node string, want float64, labels ...string) {
 	t.Helper()
 
 	var metric dto.Metric
-	if err := counter.WithLabelValues(node).Write(&metric); err != nil {
+	if err := counter.WithLabelValues(counterLabelValues(node, labels)...).Write(&metric); err != nil {
 		t.Fatalf("write counter metric: %v", err)
 	}
 

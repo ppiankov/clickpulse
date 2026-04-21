@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Prune stale table-scoped Prometheus gauge series after successful scrapes.
+- Add Kafka, object storage, Keeper memory rejection, query memory limit, and guardrail rejection alert metrics.
+
 ## [0.2.5] - 2026-04-21
 
 - Fix replica sync alerts so cumulative ClickHouse error counters only alert on recent increases.

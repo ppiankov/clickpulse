@@ -26,12 +26,32 @@ var (
 	}, []string{"node", "database", "table"})
 )
 
+type partPartitionKey struct {
+	database  string
+	table     string
+	partition string
+}
+
+type partTableKey struct {
+	database string
+	table    string
+}
+
+type partTableStats struct {
+	parts        int64
+	compressed   uint64
+	uncompressed uint64
+}
+
 func init() {
 	prometheus.MustRegister(partsPerPartition, partsTotal, partsBytes, partsCompressionRatio)
 }
 
 // Parts collects metrics from system.parts.
-type Parts struct{}
+type Parts struct {
+	partitions seriesTracker[partPartitionKey]
+	tables     seriesTracker[partTableKey]
+}
 
 func NewParts() *Parts { return &Parts{} }
 
@@ -58,13 +78,8 @@ func (p *Parts) Collect(q Querier, node string) error {
 	}
 	defer func() { _ = rows.Close() }()
 
-	type tableKey struct{ db, table string }
-	type tableStats struct {
-		parts        int64
-		compressed   uint64
-		uncompressed uint64
-	}
-	tables := make(map[tableKey]*tableStats)
+	partitions := make(map[partPartitionKey]int64)
+	tables := make(map[partTableKey]*partTableStats)
 
 	for rows.Next() {
 		var database, table, partition string
@@ -74,27 +89,56 @@ func (p *Parts) Collect(q Querier, node string) error {
 			return err
 		}
 
-		partsPerPartition.WithLabelValues(node, database, table, partition).Set(float64(partCount))
+		partitions[partPartitionKey{database: database, table: table, partition: partition}] = partCount
 
-		key := tableKey{database, table}
+		key := partTableKey{database: database, table: table}
 		s, ok := tables[key]
 		if !ok {
-			s = &tableStats{}
+			s = &partTableStats{}
 			tables[key] = s
 		}
 		s.parts += partCount
 		s.compressed += compressed
 		s.uncompressed += uncompressed
 	}
-
-	for key, s := range tables {
-		partsTotal.WithLabelValues(node, key.db, key.table).Set(float64(s.parts))
-		partsBytes.WithLabelValues(node, key.db, key.table).Set(float64(s.compressed))
-
-		if s.compressed > 0 {
-			partsCompressionRatio.WithLabelValues(node, key.db, key.table).Set(float64(s.uncompressed) / float64(s.compressed))
-		}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 
-	return rows.Err()
+	p.recordParts(node, partitions, tables)
+
+	return nil
+}
+
+func (p *Parts) recordParts(
+	node string,
+	partitions map[partPartitionKey]int64,
+	tables map[partTableKey]*partTableStats,
+) {
+	currentPartitions := make(map[partPartitionKey]struct{}, len(partitions))
+	for key, partCount := range partitions {
+		partsPerPartition.WithLabelValues(node, key.database, key.table, key.partition).Set(float64(partCount))
+		currentPartitions[key] = struct{}{}
+	}
+	p.partitions.Prune(node, currentPartitions, func(key partPartitionKey) {
+		partsPerPartition.DeleteLabelValues(node, key.database, key.table, key.partition)
+	})
+
+	currentTables := make(map[partTableKey]struct{}, len(tables))
+	for key, s := range tables {
+		partsTotal.WithLabelValues(node, key.database, key.table).Set(float64(s.parts))
+		partsBytes.WithLabelValues(node, key.database, key.table).Set(float64(s.compressed))
+
+		ratio := 0.0
+		if s.compressed > 0 {
+			ratio = float64(s.uncompressed) / float64(s.compressed)
+		}
+		partsCompressionRatio.WithLabelValues(node, key.database, key.table).Set(ratio)
+		currentTables[key] = struct{}{}
+	}
+	p.tables.Prune(node, currentTables, func(key partTableKey) {
+		partsTotal.DeleteLabelValues(node, key.database, key.table)
+		partsBytes.DeleteLabelValues(node, key.database, key.table)
+		partsCompressionRatio.DeleteLabelValues(node, key.database, key.table)
+	})
 }

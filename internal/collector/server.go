@@ -2,6 +2,8 @@ package collector
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -9,11 +11,52 @@ import (
 )
 
 const (
-	eventInsertedRows                = "InsertedRows"
-	eventSelectedRows                = "SelectedRows"
-	eventReplicatedPartFailedFetches = "ReplicatedPartFailedFetches"
-	eventReplicatedPartChecksFailed  = "ReplicatedPartChecksFailed"
-	eventReplicatedDataLoss          = "ReplicatedDataLoss"
+	eventInsertedRows                           = "InsertedRows"
+	eventSelectedRows                           = "SelectedRows"
+	eventReplicatedPartFailedFetches            = "ReplicatedPartFailedFetches"
+	eventReplicatedPartChecksFailed             = "ReplicatedPartChecksFailed"
+	eventReplicatedDataLoss                     = "ReplicatedDataLoss"
+	eventQueryMemoryLimitExceeded               = "QueryMemoryLimitExceeded"
+	eventMergesRejectedByMemoryLimit            = "MergesRejectedByMemoryLimit"
+	eventRejectedInserts                        = "RejectedInserts"
+	eventRejectedMutations                      = "RejectedMutations"
+	eventDistributedRejectedInserts             = "DistributedRejectedInserts"
+	eventKafkaRebalanceErrors                   = "KafkaRebalanceErrors"
+	eventKafkaMessagesFailed                    = "KafkaMessagesFailed"
+	eventKafkaCommitFailures                    = "KafkaCommitFailures"
+	eventKafkaConsumerErrors                    = "KafkaConsumerErrors"
+	eventKafkaMVNotReady                        = "KafkaMVNotReady"
+	eventKafkaProducerErrors                    = "KafkaProducerErrors"
+	eventKeeperSoftMemoryLimitRejections        = "KeeperRequestRejectedDueToSoftMemoryLimitCount"
+	eventS3ReadRequestsErrors                   = "S3ReadRequestsErrors"
+	eventS3ReadRequestsThrottling               = "S3ReadRequestsThrottling"
+	eventS3ReadRequestRetryableErrors           = "S3ReadRequestRetryableErrors"
+	eventS3WriteRequestsErrors                  = "S3WriteRequestsErrors"
+	eventS3WriteRequestsThrottling              = "S3WriteRequestsThrottling"
+	eventS3WriteRequestRetryableErrors          = "S3WriteRequestRetryableErrors"
+	eventDiskS3ReadRequestsErrors               = "DiskS3ReadRequestsErrors"
+	eventDiskS3ReadRequestsThrottling           = "DiskS3ReadRequestsThrottling"
+	eventDiskS3ReadRequestRetryableErrors       = "DiskS3ReadRequestRetryableErrors"
+	eventDiskS3WriteRequestsErrors              = "DiskS3WriteRequestsErrors"
+	eventDiskS3WriteRequestsThrottling          = "DiskS3WriteRequestsThrottling"
+	eventDiskS3WriteRequestRetryableErrors      = "DiskS3WriteRequestRetryableErrors"
+	eventReadBufferFromS3RequestsErrors         = "ReadBufferFromS3RequestsErrors"
+	eventWriteBufferFromS3RequestsErrors        = "WriteBufferFromS3RequestsErrors"
+	eventAzureReadRequestsErrors                = "AzureReadRequestsErrors"
+	eventAzureReadRequestsThrottling            = "AzureReadRequestsThrottling"
+	eventAzureWriteRequestsErrors               = "AzureWriteRequestsErrors"
+	eventAzureWriteRequestsThrottling           = "AzureWriteRequestsThrottling"
+	eventDiskAzureReadRequestsErrors            = "DiskAzureReadRequestsErrors"
+	eventDiskAzureReadRequestsThrottling        = "DiskAzureReadRequestsThrottling"
+	eventDiskAzureWriteRequestsErrors           = "DiskAzureWriteRequestsErrors"
+	eventDiskAzureWriteRequestsThrottling       = "DiskAzureWriteRequestsThrottling"
+	eventReadBufferFromAzureRequestsErrors      = "ReadBufferFromAzureRequestsErrors"
+	eventObjectStorageQueueFailedFiles          = "ObjectStorageQueueFailedFiles"
+	eventObjectStorageQueueFailedBatchSet       = "ObjectStorageQueueFailedToBatchSetProcessing"
+	eventObjectStorageQueueTrySetProcessingFail = "ObjectStorageQueueTrySetProcessingFailed"
+	eventObjectStorageQueueExceptionsRead       = "ObjectStorageQueueExceptionsDuringRead"
+	eventObjectStorageQueueExceptionsInsert     = "ObjectStorageQueueExceptionsDuringInsert"
+	eventObjectStorageQueueUnsuccessfulCommits  = "ObjectStorageQueueUnsuccessfulCommits"
 )
 
 var (
@@ -49,6 +92,30 @@ var (
 		Name: "clickhouse_replicated_data_loss_total",
 		Help: "Cumulative replicated data loss events (from system.events)",
 	}, []string{"node"})
+	queryMemoryLimitExceededTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "clickhouse_query_memory_limit_exceeded_total",
+		Help: "Cumulative query memory limit exceeded events (from system.events)",
+	}, []string{"node"})
+	guardrailRejectionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "clickhouse_guardrail_rejections_total",
+		Help: "Cumulative ClickHouse guardrail rejections such as too many parts or memory-limited merges",
+	}, []string{"node", "type"})
+	kafkaFailuresTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "clickhouse_kafka_failures_total",
+		Help: "Cumulative Kafka engine failures from system.events",
+	}, []string{"node", "type"})
+	keeperSoftMemoryLimitRejectionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "clickhouse_keeper_soft_memory_limit_rejections_total",
+		Help: "Cumulative Keeper requests rejected by soft memory limit (from system.events)",
+	}, []string{"node"})
+	objectStorageRequestFailuresTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "clickhouse_object_storage_request_failures_total",
+		Help: "Cumulative S3 and Azure object storage request failures from system.events",
+	}, []string{"node", "storage", "operation", "type"})
+	objectStorageQueueFailuresTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "clickhouse_object_storage_queue_failures_total",
+		Help: "Cumulative S3/Azure queue processing failures from system.events",
+	}, []string{"node", "type"})
 )
 
 func init() {
@@ -61,6 +128,12 @@ func init() {
 		replicatedPartFailedFetchesTotal,
 		replicatedPartChecksFailedTotal,
 		replicatedDataLossTotal,
+		queryMemoryLimitExceededTotal,
+		guardrailRejectionsTotal,
+		kafkaFailuresTotal,
+		keeperSoftMemoryLimitRejectionsTotal,
+		objectStorageRequestFailuresTotal,
+		objectStorageQueueFailuresTotal,
 	)
 }
 
@@ -111,17 +184,7 @@ func (s *Server) Collect(q Querier, node string) error {
 		return err
 	}
 
-	rows2, err := q.QueryContext(ctx, `
-		SELECT event, value
-		FROM system.events
-		WHERE event IN (
-			'InsertedRows',
-			'SelectedRows',
-			'ReplicatedPartFailedFetches',
-			'ReplicatedPartChecksFailed',
-			'ReplicatedDataLoss'
-		)
-	`)
+	rows2, err := q.QueryContext(ctx, systemEventsQuery())
 	if err != nil {
 		return err
 	}
@@ -145,21 +208,184 @@ func (s *Server) Collect(q Querier, node string) error {
 	return rows2.Err()
 }
 
-var systemEventCounters = map[string]*prometheus.CounterVec{
-	eventInsertedRows:                insertedRowsTotal,
-	eventSelectedRows:                selectedRowsTotal,
-	eventReplicatedPartFailedFetches: replicatedPartFailedFetchesTotal,
-	eventReplicatedPartChecksFailed:  replicatedPartChecksFailedTotal,
-	eventReplicatedDataLoss:          replicatedDataLossTotal,
+var systemEventCounters = map[string]eventCounter{
+	eventInsertedRows:                {counter: insertedRowsTotal},
+	eventSelectedRows:                {counter: selectedRowsTotal},
+	eventReplicatedPartFailedFetches: {counter: replicatedPartFailedFetchesTotal},
+	eventReplicatedPartChecksFailed:  {counter: replicatedPartChecksFailedTotal},
+	eventReplicatedDataLoss:          {counter: replicatedDataLossTotal},
+	eventQueryMemoryLimitExceeded:    {counter: queryMemoryLimitExceededTotal},
+	eventMergesRejectedByMemoryLimit: {
+		counter: guardrailRejectionsTotal,
+		labels:  []string{"merge_memory_limit"},
+	},
+	eventRejectedInserts: {
+		counter: guardrailRejectionsTotal,
+		labels:  []string{"too_many_parts_insert"},
+	},
+	eventRejectedMutations: {
+		counter: guardrailRejectionsTotal,
+		labels:  []string{"too_many_mutations"},
+	},
+	eventDistributedRejectedInserts: {
+		counter: guardrailRejectionsTotal,
+		labels:  []string{"distributed_insert_backpressure"},
+	},
+	eventKafkaRebalanceErrors: {
+		counter: kafkaFailuresTotal,
+		labels:  []string{"rebalance"},
+	},
+	eventKafkaMessagesFailed: {
+		counter: kafkaFailuresTotal,
+		labels:  []string{"message_parse"},
+	},
+	eventKafkaCommitFailures: {
+		counter: kafkaFailuresTotal,
+		labels:  []string{"commit"},
+	},
+	eventKafkaConsumerErrors: {
+		counter: kafkaFailuresTotal,
+		labels:  []string{"consumer"},
+	},
+	eventKafkaMVNotReady: {
+		counter: kafkaFailuresTotal,
+		labels:  []string{"materialized_view_not_ready"},
+	},
+	eventKafkaProducerErrors: {
+		counter: kafkaFailuresTotal,
+		labels:  []string{"producer"},
+	},
+	eventKeeperSoftMemoryLimitRejections: {counter: keeperSoftMemoryLimitRejectionsTotal},
+	eventS3ReadRequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"s3", "read", "error"},
+	},
+	eventS3ReadRequestsThrottling: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"s3", "read", "throttling"},
+	},
+	eventS3ReadRequestRetryableErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"s3", "read", "retryable_error"},
+	},
+	eventS3WriteRequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"s3", "write", "error"},
+	},
+	eventS3WriteRequestsThrottling: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"s3", "write", "throttling"},
+	},
+	eventS3WriteRequestRetryableErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"s3", "write", "retryable_error"},
+	},
+	eventDiskS3ReadRequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_s3", "read", "error"},
+	},
+	eventDiskS3ReadRequestsThrottling: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_s3", "read", "throttling"},
+	},
+	eventDiskS3ReadRequestRetryableErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_s3", "read", "retryable_error"},
+	},
+	eventDiskS3WriteRequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_s3", "write", "error"},
+	},
+	eventDiskS3WriteRequestsThrottling: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_s3", "write", "throttling"},
+	},
+	eventDiskS3WriteRequestRetryableErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_s3", "write", "retryable_error"},
+	},
+	eventReadBufferFromS3RequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"s3_buffer", "read", "error"},
+	},
+	eventWriteBufferFromS3RequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"s3_buffer", "write", "error"},
+	},
+	eventAzureReadRequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"azure", "read", "error"},
+	},
+	eventAzureReadRequestsThrottling: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"azure", "read", "throttling"},
+	},
+	eventAzureWriteRequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"azure", "write", "error"},
+	},
+	eventAzureWriteRequestsThrottling: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"azure", "write", "throttling"},
+	},
+	eventDiskAzureReadRequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_azure", "read", "error"},
+	},
+	eventDiskAzureReadRequestsThrottling: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_azure", "read", "throttling"},
+	},
+	eventDiskAzureWriteRequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_azure", "write", "error"},
+	},
+	eventDiskAzureWriteRequestsThrottling: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"disk_azure", "write", "throttling"},
+	},
+	eventReadBufferFromAzureRequestsErrors: {
+		counter: objectStorageRequestFailuresTotal,
+		labels:  []string{"azure_buffer", "read", "error"},
+	},
+	eventObjectStorageQueueFailedFiles: {
+		counter: objectStorageQueueFailuresTotal,
+		labels:  []string{"failed_files"},
+	},
+	eventObjectStorageQueueFailedBatchSet: {
+		counter: objectStorageQueueFailuresTotal,
+		labels:  []string{"batch_set_processing"},
+	},
+	eventObjectStorageQueueTrySetProcessingFail: {
+		counter: objectStorageQueueFailuresTotal,
+		labels:  []string{"set_processing"},
+	},
+	eventObjectStorageQueueExceptionsRead: {
+		counter: objectStorageQueueFailuresTotal,
+		labels:  []string{"read_exception"},
+	},
+	eventObjectStorageQueueExceptionsInsert: {
+		counter: objectStorageQueueFailuresTotal,
+		labels:  []string{"insert_exception"},
+	},
+	eventObjectStorageQueueUnsuccessfulCommits: {
+		counter: objectStorageQueueFailuresTotal,
+		labels:  []string{"commit"},
+	},
+}
+
+type eventCounter struct {
+	counter *prometheus.CounterVec
+	labels  []string
 }
 
 type cumulativeEventCounters struct {
 	mu       sync.Mutex
-	counters map[string]*prometheus.CounterVec
+	counters map[string]eventCounter
 	previous map[string]map[string]uint64
 }
 
-func newCumulativeEventCounters(counters map[string]*prometheus.CounterVec) *cumulativeEventCounters {
+func newCumulativeEventCounters(counters map[string]eventCounter) *cumulativeEventCounters {
 	return &cumulativeEventCounters{
 		counters: counters,
 		previous: make(map[string]map[string]uint64),
@@ -187,5 +413,21 @@ func (c *cumulativeEventCounters) Observe(node, event string, value uint64) {
 		return
 	}
 
-	counter.WithLabelValues(node).Add(float64(value - previous))
+	counter.counter.WithLabelValues(counterLabelValues(node, counter.labels)...).Add(float64(value - previous))
+}
+
+func counterLabelValues(node string, labels []string) []string {
+	values := make([]string, 0, 1+len(labels))
+	values = append(values, node)
+	return append(values, labels...)
+}
+
+func systemEventsQuery() string {
+	events := make([]string, 0, len(systemEventCounters))
+	for event := range systemEventCounters {
+		events = append(events, "'"+event+"'")
+	}
+	sort.Strings(events)
+
+	return "SELECT event, value FROM system.events WHERE event IN (" + strings.Join(events, ",") + ")"
 }

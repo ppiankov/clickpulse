@@ -50,6 +50,48 @@ spec:
             severity: critical
           annotations:
             summary: "ClickHouse replicated data loss on {{ "{{ $labels.node }}" }}"
+        - alert: ClickHouseKafkaFailures
+          expr: sum by (node, type) (increase(clickhouse_kafka_failures_total[10m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ClickHouse Kafka {{ "{{ $labels.type }}" }} failures on {{ "{{ $labels.node }}" }}"
+        - alert: ClickHouseObjectStorageRequestFailures
+          expr: sum by (node, storage, operation, type) (increase(clickhouse_object_storage_request_failures_total[10m])) > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ClickHouse {{ "{{ $labels.storage }}" }} {{ "{{ $labels.operation }}" }} {{ "{{ $labels.type }}" }} failures on {{ "{{ $labels.node }}" }}"
+        - alert: ClickHouseObjectStorageQueueFailures
+          expr: sum by (node, type) (increase(clickhouse_object_storage_queue_failures_total[10m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ClickHouse object storage queue {{ "{{ $labels.type }}" }} failures on {{ "{{ $labels.node }}" }}"
+        - alert: ClickHouseQueryMemoryLimitExceeded
+          expr: sum by (node) (increase(clickhouse_query_memory_limit_exceeded_total[10m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ClickHouse query memory limit exceeded on {{ "{{ $labels.node }}" }}"
+        - alert: ClickHouseGuardrailRejections
+          expr: sum by (node, type) (increase(clickhouse_guardrail_rejections_total[10m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ClickHouse {{ "{{ $labels.type }}" }} guardrail rejections on {{ "{{ $labels.node }}" }}"
+        - alert: ClickHouseKeeperSoftMemoryLimitRejections
+          expr: sum by (node) (increase(clickhouse_keeper_soft_memory_limit_rejections_total[10m])) > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ClickHouse Keeper soft memory limit rejections on {{ "{{ $labels.node }}" }}"
         - alert: ClickHouseMergeBacklog
           expr: clickhouse_merges_active > 50
           for: 10m

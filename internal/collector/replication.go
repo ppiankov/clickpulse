@@ -30,12 +30,24 @@ var (
 	}, []string{"node"})
 )
 
+type replicaTableKey struct {
+	database string
+	table    string
+}
+
+type replicaTableMetrics struct {
+	queueSize  int64
+	isReadonly uint8
+}
+
 func init() {
 	prometheus.MustRegister(replicaQueueSize, replicaInsertsInQueue, replicaLag, replicaReadonly, replicasTotal)
 }
 
 // Replication collects metrics from system.replicas.
-type Replication struct{}
+type Replication struct {
+	tables seriesTracker[replicaTableKey]
+}
 
 func NewReplication() *Replication { return &Replication{} }
 
@@ -63,6 +75,7 @@ func (r *Replication) Collect(q Querier, node string) error {
 	var total int
 	var totalInserts int64
 	var maxLag float64
+	currentTables := make(map[replicaTableKey]replicaTableMetrics)
 
 	for rows.Next() {
 		var database, table string
@@ -81,13 +94,33 @@ func (r *Replication) Collect(q Querier, node string) error {
 			maxLag = lag
 		}
 
-		replicaQueueSize.WithLabelValues(node, database, table).Set(float64(queueSize))
-		replicaReadonly.WithLabelValues(node, database, table).Set(float64(isReadonly))
+		currentTables[replicaTableKey{database: database, table: table}] = replicaTableMetrics{
+			queueSize:  queueSize,
+			isReadonly: isReadonly,
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 
 	replicasTotal.WithLabelValues(node).Set(float64(total))
 	replicaInsertsInQueue.WithLabelValues(node).Set(float64(totalInserts))
 	replicaLag.WithLabelValues(node).Set(maxLag)
+	r.recordReplicaTables(node, currentTables)
 
-	return rows.Err()
+	return nil
+}
+
+func (r *Replication) recordReplicaTables(node string, currentTables map[replicaTableKey]replicaTableMetrics) {
+	current := make(map[replicaTableKey]struct{}, len(currentTables))
+	for key, metrics := range currentTables {
+		replicaQueueSize.WithLabelValues(node, key.database, key.table).Set(float64(metrics.queueSize))
+		replicaReadonly.WithLabelValues(node, key.database, key.table).Set(float64(metrics.isReadonly))
+		current[key] = struct{}{}
+	}
+
+	r.tables.Prune(node, current, func(key replicaTableKey) {
+		replicaQueueSize.DeleteLabelValues(node, key.database, key.table)
+		replicaReadonly.DeleteLabelValues(node, key.database, key.table)
+	})
 }

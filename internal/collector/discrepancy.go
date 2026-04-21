@@ -30,6 +30,16 @@ var (
 	}, []string{"node", "database", "table"})
 )
 
+type discrepancyTableKey struct {
+	database string
+	table    string
+}
+
+type partCountDiffValue struct {
+	maxParts uint64
+	minParts uint64
+}
+
 func init() {
 	prometheus.MustRegister(
 		replicationMissingParts,
@@ -41,7 +51,11 @@ func init() {
 }
 
 // Discrepancy detects cross-replica replication inconsistencies.
-type Discrepancy struct{}
+type Discrepancy struct {
+	leaderless    seriesTracker[discrepancyTableKey]
+	unreplicated  seriesTracker[discrepancyTableKey]
+	partCountDiff seriesTracker[discrepancyTableKey]
+}
 
 func NewDiscrepancy() *Discrepancy { return &Discrepancy{} }
 
@@ -56,6 +70,9 @@ func (d *Discrepancy) Collect(q Querier, node string) error {
 		return err
 	}
 	if clusterCount == 0 {
+		d.recordLeaderless(node, map[discrepancyTableKey]struct{}{})
+		d.recordUnreplicated(node, map[discrepancyTableKey]struct{}{})
+		d.recordPartCountDiff(node, map[discrepancyTableKey]partCountDiffValue{})
 		return nil
 	}
 
@@ -84,14 +101,19 @@ func (d *Discrepancy) collectLeaderless(ctx context.Context, q Querier, node str
 	}
 	defer func() { _ = rows.Close() }()
 
+	current := make(map[discrepancyTableKey]struct{})
 	for rows.Next() {
 		var database, table string
 		if err := rows.Scan(&database, &table); err != nil {
 			return err
 		}
-		replicationLeaderlessTables.WithLabelValues(node, database, table).Set(1)
+		current[discrepancyTableKey{database: database, table: table}] = struct{}{}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	d.recordLeaderless(node, current)
+	return nil
 }
 
 func (d *Discrepancy) collectUnreplicated(ctx context.Context, q Querier, node string) error {
@@ -107,14 +129,19 @@ func (d *Discrepancy) collectUnreplicated(ctx context.Context, q Querier, node s
 	}
 	defer func() { _ = rows.Close() }()
 
+	current := make(map[discrepancyTableKey]struct{})
 	for rows.Next() {
 		var database, table string
 		if err := rows.Scan(&database, &table); err != nil {
 			return err
 		}
-		replicationUnreplicatedTables.WithLabelValues(node, database, table).Set(1)
+		current[discrepancyTableKey{database: database, table: table}] = struct{}{}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	d.recordUnreplicated(node, current)
+	return nil
 }
 
 func (d *Discrepancy) collectPartCountDiff(ctx context.Context, q Querier, node string) error {
@@ -140,13 +167,54 @@ func (d *Discrepancy) collectPartCountDiff(ctx context.Context, q Querier, node 
 	}
 	defer func() { _ = rows.Close() }()
 
+	current := make(map[discrepancyTableKey]partCountDiffValue)
 	for rows.Next() {
 		var database, table string
 		var maxParts, minParts uint64
 		if err := rows.Scan(&database, &table, &maxParts, &minParts); err != nil {
 			return err
 		}
-		replicationPartCountDiff.WithLabelValues(node, database, table).Set(float64(maxParts - minParts))
+		current[discrepancyTableKey{database: database, table: table}] = partCountDiffValue{
+			maxParts: maxParts,
+			minParts: minParts,
+		}
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	d.recordPartCountDiff(node, current)
+	return nil
+}
+
+func (d *Discrepancy) recordLeaderless(node string, current map[discrepancyTableKey]struct{}) {
+	for key := range current {
+		replicationLeaderlessTables.WithLabelValues(node, key.database, key.table).Set(1)
+	}
+	d.leaderless.Prune(node, current, func(key discrepancyTableKey) {
+		replicationLeaderlessTables.DeleteLabelValues(node, key.database, key.table)
+	})
+}
+
+func (d *Discrepancy) recordUnreplicated(node string, current map[discrepancyTableKey]struct{}) {
+	for key := range current {
+		replicationUnreplicatedTables.WithLabelValues(node, key.database, key.table).Set(1)
+	}
+	d.unreplicated.Prune(node, current, func(key discrepancyTableKey) {
+		replicationUnreplicatedTables.DeleteLabelValues(node, key.database, key.table)
+	})
+}
+
+func (d *Discrepancy) recordPartCountDiff(
+	node string,
+	current map[discrepancyTableKey]partCountDiffValue,
+) {
+	currentSeries := make(map[discrepancyTableKey]struct{}, len(current))
+	for key, value := range current {
+		replicationPartCountDiff.WithLabelValues(node, key.database, key.table).
+			Set(float64(value.maxParts - value.minParts))
+		currentSeries[key] = struct{}{}
+	}
+	d.partCountDiff.Prune(node, currentSeries, func(key discrepancyTableKey) {
+		replicationPartCountDiff.DeleteLabelValues(node, key.database, key.table)
+	})
 }
