@@ -7,10 +7,10 @@ A heartbeat monitor for ClickHouse — polls system tables, exposes Prometheus m
 
 ## What clickpulse is
 
-- A lightweight sidecar that connects to ClickHouse and exposes 40+ Prometheus-compatible metrics
-- A poll-based exporter for queries, merges, mutations, replication, parts health, Keeper state, distributed DDL, dictionaries, disk usage, and query regression detection
+- A lightweight sidecar that connects to ClickHouse and exposes 60+ Prometheus-compatible metric families
+- A poll-based exporter for queries, merges, mutations, replication, parts health, Keeper state, distributed DDL, dictionaries, disk usage, query regression detection, and ClickHouse failure counters
 - Compatible with ClickHouse 22.x+ (auto-detects version for correct system table schemas)
-- Ships with a Grafana dashboard and a Helm chart with ServiceMonitor
+- Ships with a Grafana dashboard and a Helm chart with ServiceMonitor and PrometheusRule resources
 - Zero config beyond a DSN — sensible defaults for everything
 
 ## What clickpulse is NOT
@@ -43,14 +43,14 @@ GRANT SELECT ON system.* TO clickpulse;
 | `system.query_log` | Query regression | Mean time deltas, call counts |
 | `system.merges` | Merge pressure | Active merges, bytes/sec, part count |
 | `system.mutations` | Mutations | Stuck mutations, parts remaining |
-| `system.replicas` | Replication | Queue size, lag, delay |
-| `system.parts` | Parts health | Part count per partition, sizes |
+| `system.replicas` | Replication | Queue size, lag, readonly state |
+| `system.parts` | Parts health | Part counts per partition and table, sizes, compression |
 | `system.disks` | Disk/storage | Free space, total, usage ratio |
 | `system.dictionaries` | Dictionaries | Load status, staleness |
 | `system.distributed_ddl_queue` | Distributed DDL | Stuck operations |
 | `system.zookeeper` / Keeper API | Keeper health | Latency, ephemeral nodes, leader |
 | `system.metrics` | Server metrics | ClickHouse internal counters |
-| `system.events` | Server events | Cumulative event counters |
+| `system.events` | Server events | Cumulative insert, replication, Kafka, object storage, Keeper memory, and guardrail counters |
 
 ### Connection string
 
@@ -78,6 +78,8 @@ docker run -e CLICKHOUSE_DSN="clickhouse://clickpulse@localhost:9000/default" -p
 ```
 
 Metrics at `http://localhost:9188/metrics`, health check at `/healthz`.
+
+The Helm PrometheusRule covers reachability, scrape errors, replica lag and sync failures, replicated data loss, Kafka failures, object storage failures, query memory limits, ClickHouse guardrail rejections, merge backlog, stuck mutations, part explosions, disk fullness, and Keeper health.
 
 ### Helm (Kubernetes)
 
@@ -147,12 +149,14 @@ internal/
     processes.go                     system.processes (active queries, memory, elapsed)
     merges.go                        system.merges (merge pressure, bytes/sec)
     mutations.go                     system.mutations (stuck mutations, parts remaining)
-    replication.go                   system.replicas (queue size, lag, delay)
-    parts.go                         system.parts (part count per partition, sizes)
-    regression.go                    system.query_log (mean time deltas, stateful)
-    storage.go                       system.disks (free space, usage ratio)
+    replication.go                   system.replicas (queue size, lag, readonly)
+    parts.go                         system.parts (partition/table part counts, sizes)
+    querylog.go                      system.query_log (mean time deltas, stateful)
+    disks.go                         system.disks (free space, usage ratio)
     dictionaries.go                  system.dictionaries (load status, staleness)
     ddl.go                           system.distributed_ddl_queue (stuck DDL)
+    discrepancy.go                   replication consistency checks
+    keeper.go                        Keeper health via mntr
     server.go                        system.metrics + system.events
     querier.go                       Interface for testability
   keeper/                            ClickHouse Keeper / ZooKeeper health
@@ -175,7 +179,7 @@ deploy/
 - No support for multiple ClickHouse clusters in a single process
 - Query regression detection requires `system.query_log` (enabled by default)
 - Keeper metrics require either ClickHouse Keeper or ZooKeeper access
-- Part count metrics are per-partition, not per-table (by design — partition-level is where problems show)
+- Part count metrics are per-partition and per-table; the default part explosion alert remains partition-scoped
 
 ## Roadmap
 

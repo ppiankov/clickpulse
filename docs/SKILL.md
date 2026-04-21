@@ -18,7 +18,7 @@ go install github.com/ppiankov/clickpulse/cmd/clickpulse@latest
 
 ### clickpulse serve
 
-Start the metrics exporter. Connects to ClickHouse, runs 12 collectors on a poll loop, exposes `/metrics` and `/healthz`.
+Start the metrics exporter. Connects to ClickHouse, runs 12 collectors on a poll loop, exposes `/metrics` and `/healthz`. The Helm chart can install PrometheusRule alerts for replication, part explosions, disk fullness, Keeper health, Kafka failures, object storage failures, memory limits, and ClickHouse guardrail rejections.
 
 **Environment variables:** `CLICKHOUSE_DSN` (required), `METRICS_PORT` (default 9188), `POLL_INTERVAL` (default 5s), `SLOW_QUERY_THRESHOLD` (default 5s), `REGRESSION_THRESHOLD` (default 2.0), `STMT_LIMIT` (default 50), `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ALERT_WEBHOOK_URL`, `ALERT_COOLDOWN`, `GRAFANA_URL`, `GRAFANA_TOKEN`, `GRAFANA_DASHBOARD_UID`.
 
