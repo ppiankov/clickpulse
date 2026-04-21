@@ -4,4 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-- Initial project scaffold
+## [0.2.5] - 2026-04-21
+
+- Fix replica sync alerts so cumulative ClickHouse error counters only alert on recent increases.
+- Add replicated part fetch/check failure and replicated data loss counters.
+- Fix mutation parts remaining gauge so it no longer accumulates across scrapes.
