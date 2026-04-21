@@ -18,7 +18,7 @@ var (
 	}, []string{"node"})
 	replicaLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_replica_lag_seconds",
-		Help: "Maximum absolute delay across all replicated tables",
+		Help: "Maximum replication delay across tables with queued work or uncopied log entries",
 	}, []string{"node"})
 	replicaReadonly = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_replica_readonly",
@@ -63,6 +63,8 @@ func (r *Replication) Collect(q Querier, node string) error {
 			table,
 			queue_size,
 			inserts_in_queue,
+			log_max_index,
+			log_pointer,
 			absolute_delay,
 			is_readonly
 		FROM system.replicas
@@ -80,16 +82,25 @@ func (r *Replication) Collect(q Querier, node string) error {
 	for rows.Next() {
 		var database, table string
 		var queueSize, insertsInQueue int64
-		var absDelay uint64
+		var logMaxIndex, logPointer, absDelay uint64
 		var isReadonly uint8
-		if err := rows.Scan(&database, &table, &queueSize, &insertsInQueue, &absDelay, &isReadonly); err != nil {
+		if err := rows.Scan(
+			&database,
+			&table,
+			&queueSize,
+			&insertsInQueue,
+			&logMaxIndex,
+			&logPointer,
+			&absDelay,
+			&isReadonly,
+		); err != nil {
 			return err
 		}
 
 		total++
 		totalInserts += insertsInQueue
 
-		lag := float64(absDelay)
+		lag := alertableReplicaLag(queueSize, logMaxIndex, logPointer, absDelay)
 		if lag > maxLag {
 			maxLag = lag
 		}
@@ -109,6 +120,16 @@ func (r *Replication) Collect(q Querier, node string) error {
 	r.recordReplicaTables(node, currentTables)
 
 	return nil
+}
+
+func alertableReplicaLag(queueSize int64, logMaxIndex, logPointer, absDelay uint64) float64 {
+	if queueSize > 0 {
+		return float64(absDelay)
+	}
+	if logMaxIndex > 0 && logPointer <= logMaxIndex {
+		return float64(absDelay)
+	}
+	return 0
 }
 
 func (r *Replication) recordReplicaTables(node string, currentTables map[replicaTableKey]replicaTableMetrics) {

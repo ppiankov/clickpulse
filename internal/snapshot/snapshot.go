@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const alertableReplicaLag = "max(if(queue_size > 0 OR (log_max_index > 0 AND log_pointer <= log_max_index), absolute_delay, 0))"
+
 // Snapshot holds a point-in-time health summary of the ClickHouse cluster.
 type Snapshot struct {
 	Version        string
@@ -54,12 +56,7 @@ func Take(ctx context.Context, db *sql.DB) (*Snapshot, error) {
 	}
 
 	// Replication
-	row := db.QueryRowContext(ctx, `
-		SELECT
-			max(absolute_delay),
-			countIf(is_readonly = 1)
-		FROM system.replicas
-	`)
+	row := db.QueryRowContext(ctx, "SELECT "+alertableReplicaLag+", countIf(is_readonly = 1) FROM system.replicas")
 	var lag sql.NullFloat64
 	var readonly sql.NullInt64
 	if err := row.Scan(&lag, &readonly); err != nil {

@@ -28,6 +28,7 @@ const (
 	mergeBacklogThreshold = 50
 	partCountThreshold    = 300 // per partition
 	replicaLagThreshold   = 30  // seconds
+	alertableReplicaLag   = "max(if(queue_size > 0 OR (log_max_index > 0 AND log_pointer <= log_max_index), absolute_delay, 0))"
 )
 
 func checkMergeBacklog(ctx context.Context, db *sql.DB, a *Alerter, node string) {
@@ -85,9 +86,7 @@ func checkPartExplosion(ctx context.Context, db *sql.DB, a *Alerter, node string
 
 func checkReplicaLag(ctx context.Context, db *sql.DB, a *Alerter, node string) {
 	var maxLag float64
-	if err := db.QueryRowContext(ctx, `
-		SELECT max(absolute_delay) FROM system.replicas
-	`).Scan(&maxLag); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT "+alertableReplicaLag+" FROM system.replicas").Scan(&maxLag); err != nil {
 		return
 	}
 	if maxLag >= replicaLagThreshold {

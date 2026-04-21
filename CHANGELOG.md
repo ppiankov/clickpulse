@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Fix replica lag alerts so idle replicated tables with old `absolute_delay` values do not page unless there is queued work or an uncopied replication log entry.
+
 ## [0.2.6] - 2026-04-21
 
 - Prune stale table-scoped Prometheus gauge series after successful scrapes.

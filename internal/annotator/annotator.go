@@ -12,6 +12,8 @@ import (
 	"time"
 )
 
+const alertableReplicaLag = "max(if(queue_size > 0 OR (log_max_index > 0 AND log_pointer <= log_max_index), absolute_delay, 0))"
+
 // Annotator pushes Grafana annotations on anomaly spikes.
 type Annotator struct {
 	grafanaURL    string
@@ -78,7 +80,7 @@ func (a *Annotator) checkPartCountSpike(ctx context.Context, db *sql.DB) {
 
 func (a *Annotator) checkReplicaLagSpike(ctx context.Context, db *sql.DB) {
 	var maxLag float64
-	if err := db.QueryRowContext(ctx, "SELECT max(absolute_delay) FROM system.replicas").Scan(&maxLag); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT "+alertableReplicaLag+" FROM system.replicas").Scan(&maxLag); err != nil {
 		return
 	}
 	if maxLag >= 20 {
