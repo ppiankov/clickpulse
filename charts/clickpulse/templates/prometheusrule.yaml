@@ -27,12 +27,15 @@ spec:
           annotations:
             summary: "clickpulse scrape errors on {{ "{{ $labels.node }}" }}"
         - alert: ClickHouseReplicaLag
-          expr: clickhouse_replica_lag_seconds > 30
+          expr: |
+            (clickhouse_replica_lag_seconds > 30)
+            and on (node)
+            (sum by (node) (clickhouse_replica_queue_size) > 0)
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "ClickHouse replica lag > 30s"
+            summary: "ClickHouse replica lag > 30s with pending queue work"
         - alert: ClickHouseReplicaSyncErrors
           expr: |
             sum by (node) (increase(clickhouse_replicated_part_failed_fetches_total[10m])) > 0

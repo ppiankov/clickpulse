@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-04-21
+
+- Require pending replica queue work before the Helm replica lag alert fires.
+
 ## [0.2.7] - 2026-04-21
 
 - Fix replica lag alerts so idle replicated tables with old `absolute_delay` values do not page unless there is queued work or an uncopied replication log entry.
