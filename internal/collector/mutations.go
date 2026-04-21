@@ -2,6 +2,7 @@ package collector
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,10 +29,22 @@ func init() {
 
 const stuckThreshold = 10 * time.Minute
 
-// Mutations collects metrics from system.mutations.
-type Mutations struct{}
+type mutationPartsKey struct {
+	database string
+	table    string
+}
 
-func NewMutations() *Mutations { return &Mutations{} }
+// Mutations collects metrics from system.mutations.
+type Mutations struct {
+	mu            sync.Mutex
+	previousParts map[string]map[mutationPartsKey]struct{}
+}
+
+func NewMutations() *Mutations {
+	return &Mutations{
+		previousParts: make(map[string]map[mutationPartsKey]struct{}),
+	}
+}
 
 func (m *Mutations) Name() string { return "mutations" }
 
@@ -55,6 +68,7 @@ func (m *Mutations) Collect(q Querier, node string) error {
 	defer func() { _ = rows.Close() }()
 
 	var active, stuck int
+	partsByTable := make(map[mutationPartsKey]int64)
 
 	now := time.Now()
 	for rows.Next() {
@@ -67,7 +81,7 @@ func (m *Mutations) Collect(q Querier, node string) error {
 		}
 
 		active++
-		mutationPartsRemaining.WithLabelValues(node, database, table).Add(float64(partsToDo))
+		partsByTable[mutationPartsKey{database: database, table: table}] += partsToDo
 
 		if now.Sub(createTime) > stuckThreshold {
 			stuck++
@@ -77,5 +91,35 @@ func (m *Mutations) Collect(q Querier, node string) error {
 	mutationsActive.WithLabelValues(node).Set(float64(active))
 	mutationsStuck.WithLabelValues(node).Set(float64(stuck))
 
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	m.recordMutationParts(node, partsByTable)
+
+	return nil
+}
+
+func (m *Mutations) recordMutationParts(node string, partsByTable map[mutationPartsKey]int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.previousParts == nil {
+		m.previousParts = make(map[string]map[mutationPartsKey]struct{})
+	}
+
+	previous := m.previousParts[node]
+	current := make(map[mutationPartsKey]struct{}, len(partsByTable))
+
+	for key, partsToDo := range partsByTable {
+		mutationPartsRemaining.WithLabelValues(node, key.database, key.table).Set(float64(partsToDo))
+		current[key] = struct{}{}
+		delete(previous, key)
+	}
+
+	for key := range previous {
+		mutationPartsRemaining.DeleteLabelValues(node, key.database, key.table)
+	}
+
+	m.previousParts[node] = current
 }

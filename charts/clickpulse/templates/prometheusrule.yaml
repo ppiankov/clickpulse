@@ -19,6 +19,13 @@ spec:
             severity: critical
           annotations:
             summary: "ClickHouse is unreachable"
+        - alert: ClickHouseScrapeErrors
+          expr: sum by (node) (increase(clickhouse_scrape_errors_total[10m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "clickpulse scrape errors on {{ "{{ $labels.node }}" }}"
         - alert: ClickHouseReplicaLag
           expr: clickhouse_replica_lag_seconds > 30
           for: 5m
@@ -26,6 +33,23 @@ spec:
             severity: warning
           annotations:
             summary: "ClickHouse replica lag > 30s"
+        - alert: ClickHouseReplicaSyncErrors
+          expr: |
+            sum by (node) (increase(clickhouse_replicated_part_failed_fetches_total[10m])) > 0
+            or
+            sum by (node) (increase(clickhouse_replicated_part_checks_failed_total[10m])) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ClickHouse replica sync errors on {{ "{{ $labels.node }}" }}"
+        - alert: ClickHouseReplicationDataLoss
+          expr: sum by (node) (increase(clickhouse_replicated_data_loss_total[10m])) > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ClickHouse replicated data loss on {{ "{{ $labels.node }}" }}"
         - alert: ClickHouseMergeBacklog
           expr: clickhouse_merges_active > 50
           for: 10m
