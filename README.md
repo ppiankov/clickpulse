@@ -44,6 +44,7 @@ GRANT SELECT ON system.* TO clickpulse;
 | `system.merges` | Merge pressure | Active merges, bytes/sec, part count |
 | `system.mutations` | Mutations | Stuck mutations, parts remaining |
 | `system.replicas` | Replication | Queue size, lag, readonly state |
+| `system.replication_queue` | Replication queue | Task counts, oldest task age, retry counts, missing-part failures |
 | `system.parts` | Parts health | Part counts per partition and table, sizes, compression |
 | `system.disks` | Disk/storage | Free space, total, usage ratio |
 | `system.dictionaries` | Dictionaries | Load status, staleness |
@@ -79,7 +80,7 @@ docker run -e CLICKHOUSE_DSN="clickhouse://clickpulse@localhost:9000/default" -p
 
 Metrics at `http://localhost:9188/metrics`, health check at `/healthz`.
 
-The Helm PrometheusRule covers reachability, scrape errors, replica lag and sync failures, replicated data loss, Kafka failures, object storage failures, query memory limits, ClickHouse guardrail rejections, merge backlog, stuck mutations, part explosions, disk fullness, and Keeper health.
+The Helm PrometheusRule covers reachability, scrape errors, sustained replication queue backlog, missing-part replication failures, replica sync failures, replicated data loss, Kafka failures, object storage failures, query memory limits, ClickHouse guardrail rejections, merge backlog, stuck mutations, part explosions, disk fullness, and Keeper health.
 
 ### Helm (Kubernetes)
 
@@ -150,6 +151,7 @@ internal/
     merges.go                        system.merges (merge pressure, bytes/sec)
     mutations.go                     system.mutations (stuck mutations, parts remaining)
     replication.go                   system.replicas (queue size, lag, readonly)
+    replication_queue.go             system.replication_queue (task age, retries, failures)
     parts.go                         system.parts (partition/table part counts, sizes)
     querylog.go                      system.query_log (mean time deltas, stateful)
     disks.go                         system.disks (free space, usage ratio)
@@ -188,6 +190,7 @@ deploy/
 - [ ] Merge pressure collector (system.merges)
 - [ ] Mutations collector (system.mutations)
 - [ ] Replication collector (system.replicas)
+- [ ] Replication queue collector (system.replication_queue)
 - [ ] Parts health collector (system.parts)
 - [ ] Query regression detection (system.query_log)
 - [ ] Disk/storage collector (system.disks)

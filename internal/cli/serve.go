@@ -50,6 +50,7 @@ var serveCmd = &cobra.Command{
 			collector.NewMerges(),
 			collector.NewMutations(),
 			collector.NewReplication(),
+			collector.NewReplicationQueue(),
 			collector.NewParts(),
 			collector.NewDisks(),
 			collector.NewServer(),

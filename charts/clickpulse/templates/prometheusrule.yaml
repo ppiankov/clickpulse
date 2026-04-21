@@ -26,13 +26,26 @@ spec:
             severity: warning
           annotations:
             summary: "clickpulse scrape errors on {{ "{{ $labels.node }}" }}"
-        - alert: ClickHouseReplicaLag
-          expr: clickhouse_replica_table_lag_seconds > 30
+        - alert: ClickHouseReplicationQueueBacklog
+          expr: |
+            min_over_time(clickhouse_replication_queue_tasks[30m]) > 5
+            and on (node, database, table, type)
+            min_over_time(clickhouse_replication_queue_oldest_age_seconds[30m]) > 600
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "ClickHouse replica {{ "{{ $labels.database }}" }}.{{ "{{ $labels.table }}" }} lag > 30s"
+            summary: "ClickHouse replication queue backlog on {{ "{{ $labels.database }}" }}.{{ "{{ $labels.table }}" }}"
+        - alert: ClickHouseReplicationMissingParts
+          expr: |
+            min_over_time(clickhouse_replication_queue_failures{type="GET_PART", exception_code="NO_REPLICA_HAS_PART"}[10m]) > 0
+            and on (node, database, table, type)
+            min_over_time(clickhouse_replication_queue_oldest_age_seconds[10m]) > 3600
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "ClickHouse replica cannot fetch missing parts for {{ "{{ $labels.database }}" }}.{{ "{{ $labels.table }}" }}"
         - alert: ClickHouseReplicaSyncErrors
           expr: |
             sum by (node) (increase(clickhouse_replicated_part_failed_fetches_total[10m])) > 0

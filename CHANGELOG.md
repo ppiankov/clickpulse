@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Add `system.replication_queue` metrics and split replication backlog alerts from missing-part failures.
+
 ## [0.2.9] - 2026-04-21
 
 - Add table-scoped replica lag metrics and make the Helm replica lag alert match lag and pending work on the same table.
