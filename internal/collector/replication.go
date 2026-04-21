@@ -20,6 +20,10 @@ var (
 		Name: "clickhouse_replica_lag_seconds",
 		Help: "Maximum replication delay across tables with queued work or uncopied log entries",
 	}, []string{"node"})
+	replicaTableLag = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "clickhouse_replica_table_lag_seconds",
+		Help: "Replication delay per table when queued work or uncopied log entries exist",
+	}, []string{"node", "database", "table"})
 	replicaReadonly = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "clickhouse_replica_readonly",
 		Help: "1 if the replica is in read-only mode",
@@ -37,11 +41,19 @@ type replicaTableKey struct {
 
 type replicaTableMetrics struct {
 	queueSize  int64
+	lag        float64
 	isReadonly uint8
 }
 
 func init() {
-	prometheus.MustRegister(replicaQueueSize, replicaInsertsInQueue, replicaLag, replicaReadonly, replicasTotal)
+	prometheus.MustRegister(
+		replicaQueueSize,
+		replicaInsertsInQueue,
+		replicaLag,
+		replicaTableLag,
+		replicaReadonly,
+		replicasTotal,
+	)
 }
 
 // Replication collects metrics from system.replicas.
@@ -107,6 +119,7 @@ func (r *Replication) Collect(q Querier, node string) error {
 
 		currentTables[replicaTableKey{database: database, table: table}] = replicaTableMetrics{
 			queueSize:  queueSize,
+			lag:        lag,
 			isReadonly: isReadonly,
 		}
 	}
@@ -136,12 +149,14 @@ func (r *Replication) recordReplicaTables(node string, currentTables map[replica
 	current := make(map[replicaTableKey]struct{}, len(currentTables))
 	for key, metrics := range currentTables {
 		replicaQueueSize.WithLabelValues(node, key.database, key.table).Set(float64(metrics.queueSize))
+		replicaTableLag.WithLabelValues(node, key.database, key.table).Set(metrics.lag)
 		replicaReadonly.WithLabelValues(node, key.database, key.table).Set(float64(metrics.isReadonly))
 		current[key] = struct{}{}
 	}
 
 	r.tables.Prune(node, current, func(key replicaTableKey) {
 		replicaQueueSize.DeleteLabelValues(node, key.database, key.table)
+		replicaTableLag.DeleteLabelValues(node, key.database, key.table)
 		replicaReadonly.DeleteLabelValues(node, key.database, key.table)
 	})
 }

@@ -13,20 +13,25 @@ func TestRecordReplicaTablesSetsAndDeletesStaleSeries(t *testing.T) {
 	key := replicaTableKey{database: testReplicaDB, table: testReplicaTable}
 
 	replication.recordReplicaTables(testReplicaNode, map[replicaTableKey]replicaTableMetrics{
-		key: {queueSize: 5, isReadonly: 1},
+		key: {queueSize: 5, lag: 45, isReadonly: 1},
 	})
 	assertGaugeVecValue(t, replicaQueueSize, 5, testReplicaNode, testReplicaDB, testReplicaTable)
+	assertGaugeVecValue(t, replicaTableLag, 45, testReplicaNode, testReplicaDB, testReplicaTable)
 	assertGaugeVecValue(t, replicaReadonly, 1, testReplicaNode, testReplicaDB, testReplicaTable)
 
 	replication.recordReplicaTables(testReplicaNode, map[replicaTableKey]replicaTableMetrics{
-		key: {queueSize: 2, isReadonly: 0},
+		key: {queueSize: 2, lag: 12, isReadonly: 0},
 	})
 	assertGaugeVecValue(t, replicaQueueSize, 2, testReplicaNode, testReplicaDB, testReplicaTable)
+	assertGaugeVecValue(t, replicaTableLag, 12, testReplicaNode, testReplicaDB, testReplicaTable)
 	assertGaugeVecValue(t, replicaReadonly, 0, testReplicaNode, testReplicaDB, testReplicaTable)
 
 	replication.recordReplicaTables(testReplicaNode, map[replicaTableKey]replicaTableMetrics{})
 	if deleted := replicaQueueSize.DeleteLabelValues(testReplicaNode, testReplicaDB, testReplicaTable); deleted {
 		t.Fatalf("replica queue size series for %s.%s was not deleted", testReplicaDB, testReplicaTable)
+	}
+	if deleted := replicaTableLag.DeleteLabelValues(testReplicaNode, testReplicaDB, testReplicaTable); deleted {
+		t.Fatalf("replica table lag series for %s.%s was not deleted", testReplicaDB, testReplicaTable)
 	}
 	if deleted := replicaReadonly.DeleteLabelValues(testReplicaNode, testReplicaDB, testReplicaTable); deleted {
 		t.Fatalf("replica readonly series for %s.%s was not deleted", testReplicaDB, testReplicaTable)
