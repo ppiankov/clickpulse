@@ -22,13 +22,17 @@ func CheckAndFire(ctx context.Context, db *sql.DB, a *Alerter, node string) {
 	checkPartExplosion(ctx, db, a, node)
 	checkReplicaLag(ctx, db, a, node)
 	checkKeeperLeader(ctx, db, a, node)
+	checkOrphanReplicatedTables(ctx, db, a, node)
+	checkUnreplicatedTables(ctx, db, a, node)
+	checkPartCountDiff(ctx, db, a, node)
 }
 
 const (
-	mergeBacklogThreshold = 50
-	partCountThreshold    = 300 // per partition
-	replicaLagThreshold   = 30  // seconds
-	alertableReplicaLag   = "max(if(queue_size > 0 OR (log_max_index > 0 AND log_pointer <= log_max_index), absolute_delay, 0))"
+	mergeBacklogThreshold  = 50
+	partCountThreshold     = 300 // per partition
+	replicaLagThreshold    = 30  // seconds
+	partCountDiffThreshold = 100 // cross-replica part count skew; distinct from per-partition part explosion
+	alertableReplicaLag    = "max(if(queue_size > 0 OR (log_max_index > 0 AND log_pointer <= log_max_index), absolute_delay, 0))"
 )
 
 func checkMergeBacklog(ctx context.Context, db *sql.DB, a *Alerter, node string) {
@@ -119,6 +123,84 @@ func checkKeeperLeader(ctx context.Context, db *sql.DB, a *Alerter, node string)
 			Name:    "keeper_leader_loss",
 			Host:    node,
 			Message: "this node lost Keeper leadership",
+		})
+	}
+}
+
+func clusterIsStandalone(ctx context.Context, db *sql.DB) bool {
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT count(DISTINCT cluster) FROM system.clusters").Scan(&count); err != nil {
+		return true
+	}
+	return count == 0
+}
+
+func checkOrphanReplicatedTables(ctx context.Context, db *sql.DB, a *Alerter, node string) {
+	if clusterIsStandalone(ctx, db) {
+		return
+	}
+	var count int
+	var database, table string
+	// total_replicas = 1 means this node holds the only replica — orphan.
+	if err := db.QueryRowContext(ctx, `
+		SELECT count(), any(database), any(table)
+		FROM system.replicas
+		WHERE total_replicas = 1
+	`).Scan(&count, &database, &table); err != nil || count == 0 {
+		return
+	}
+	a.Fire(ctx, Alert{
+		Name:    "orphan_replicated_table",
+		Host:    node,
+		Message: fmt.Sprintf("%d orphan Replicated table(s) with total_replicas=1 (e.g. %s.%s)", count, database, table),
+	})
+}
+
+func checkUnreplicatedTables(ctx context.Context, db *sql.DB, a *Alerter, node string) {
+	if clusterIsStandalone(ctx, db) {
+		return
+	}
+	var count int
+	if err := db.QueryRowContext(ctx, `
+		SELECT count()
+		FROM system.tables
+		WHERE engine LIKE '%MergeTree%'
+		  AND engine NOT LIKE 'Replicated%'
+		  AND database NOT IN ('system', 'information_schema', 'INFORMATION_SCHEMA')
+	`).Scan(&count); err != nil || count == 0 {
+		return
+	}
+	a.Fire(ctx, Alert{
+		Name:    "unreplicated_table",
+		Host:    node,
+		Message: fmt.Sprintf("%d plain MergeTree table(s) in clustered setup", count),
+	})
+}
+
+func checkPartCountDiff(ctx context.Context, db *sql.DB, a *Alerter, node string) {
+	if clusterIsStandalone(ctx, db) {
+		return
+	}
+	var database, table string
+	var maxDiff uint64
+	if err := db.QueryRowContext(ctx, `
+		SELECT database, table, max(active_replicas) - min(active_replicas) AS diff
+		FROM (
+			SELECT database, table, replica_name,
+			       toUInt64(parts_to_check) + toUInt64(queue_size) AS active_replicas
+			FROM system.replicas
+		)
+		GROUP BY database, table
+		ORDER BY diff DESC
+		LIMIT 1
+	`).Scan(&database, &table, &maxDiff); err != nil {
+		return
+	}
+	if maxDiff > partCountDiffThreshold {
+		a.Fire(ctx, Alert{
+			Name:    "part_count_diff",
+			Host:    node,
+			Message: fmt.Sprintf("replica part count diff %d for %s.%s (threshold %d)", maxDiff, database, table, partCountDiffThreshold),
 		})
 	}
 }

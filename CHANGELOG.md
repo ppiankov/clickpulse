@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-28
+
+- Add PrometheusRule alerts for all four replication-discrepancy gauges: `ClickHouseOrphanReplicatedTable` (critical, 10m), `ClickHouseUnreplicatedTable` (warning, 30m), `ClickHouseLeaderlessReplicatedTable` (critical, 5m), `ClickHousePartCountDiff` (warning, 15m, threshold 100).
+- Add built-in alerter equivalents in `internal/alerter/rules.go`: `checkOrphanReplicatedTables`, `checkUnreplicatedTables`, `checkPartCountDiff` — all no-ops on standalone nodes.
+
 ## [0.3.0] - 2026-04-21
 
 - Add `system.replication_queue` metrics and split replication backlog alerts from missing-part failures.

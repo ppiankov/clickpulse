@@ -168,4 +168,35 @@ spec:
             severity: warning
           annotations:
             summary: "Keeper {{ "{{ $labels.keeper }}" }} has > 100 outstanding requests"
+        - alert: ClickHouseOrphanReplicatedTable
+          expr: max by (database, table, host) (clickhouse_replication_orphan_tables) > 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Replicated table {{ "{{ $labels.database }}" }}.{{ "{{ $labels.table }}" }} exists only on {{ "{{ $labels.host }}" }} (no peer replicas)"
+            description: "A table with a Replicated* engine was created on one node but is missing on peer replicas. Almost always a missed ON CLUSTER. Writes to this table are unreplicated and will be lost on host failure. If a single-server table is intentional, do not use a Replicated engine."
+        - alert: ClickHouseUnreplicatedTable
+          expr: max by (database, table) (clickhouse_replication_unreplicated_tables) > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Plain MergeTree table {{ "{{ $labels.database }}" }}.{{ "{{ $labels.table }}" }} in clustered setup"
+            description: "This cluster has multiple replicas but the table uses a non-Replicated MergeTree engine. Data is not replicated."
+        - alert: ClickHouseLeaderlessReplicatedTable
+          expr: max by (database, table) (clickhouse_replication_leaderless_tables) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Replicated table {{ "{{ $labels.database }}" }}.{{ "{{ $labels.table }}" }} has no active leader"
+        - alert: ClickHousePartCountDiff
+          expr: max by (database, table) (clickhouse_replication_part_count_diff) > 100
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Replica part count diverged for {{ "{{ $labels.database }}" }}.{{ "{{ $labels.table }}" }}"
+            description: "Max part count difference across replicas exceeds 100 for >15m. Indicates one replica is failing to merge or fetch parts. Investigate replication queue and merges on lagging replica."
 {{- end }}
